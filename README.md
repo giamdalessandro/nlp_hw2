@@ -1,4 +1,4 @@
-# NLP-2021: Second Homework
+# NLP-2021 Hw2: Aspect-Based Sentiment Analysis (ABSA)
 Repository the 2nd homework of the NLP 2021 course at Sapienza University of Rome.
 
 Source code in this repo is an extension of NLP TA's code (see [requirements](#requirements) below). As in the assignement, I only edited the following folders and files:

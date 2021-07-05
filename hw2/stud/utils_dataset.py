@@ -4,22 +4,19 @@ import json
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 
-
-SEMCOR_XML  = "data/wsd_data/semcor.data_bis.xml"
-SEMCOR_JSON = "data/wsd_data/semcor.data.json"
-
-TRAIN_PATH = "data/wsd_data/wsd_train.json"
-DEV_PATH   = "data/dev.jsonl"
-DEV_LABELS = "data/dev_wsd.txt"
+LAPTOP_TRAIN     = "data/laptops_train.json"
+LAPTOP_DEV       = "data/laptops_dev.json"
+RESTAURANT_TRAIN = "data/restaurants_train.json"
+RESTAURANT_DEV   = "data/restaurants_dev.json"
 
 
 class ABSADataset(Dataset):
     """
-    Override of torch base Dataset class to proerly load WSD data.
+    Override of torch base Dataset class to proerly load ABSA data.
     """
     def __init__(self, 
-            train_path: str=TRAIN_PATH, 
-            dev_path  : str=DEV_PATH, 
+            train_path: str=LAPTOP_TRAIN, 
+            dev_path  : str=LAPTOP_DEV, 
             batch_size: int=32,
         ):
         self.train_path  = train_path
@@ -51,11 +48,11 @@ class ABSADataset(Dataset):
 
 class ABSADataModule(pl.LightningDataModule):
     """
-    Override of pl.LightningDataModule class to easly handle WSDDataset for training and evaluation.
+    Override of pl.LightningDataModule class to easly handle ABSADataset for training and evaluation.
     """
     def __init__(self, 
-            train_path: str=TRAIN_PATH, 
-            dev_path  : str=DEV_PATH
+            train_path: str=LAPTOP_TRAIN, 
+            dev_path  : str=LAPTOP_DEV,
         ):
         super().__init__()
         self.train_path  = train_path

@@ -20,7 +20,7 @@ class ABSAClassifier(pl.LightningModule):
     def validation_step(self, val_batch, batch_idx):
         return
 
-    # may be needed
+    # TODO may be needed
     ##def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
     ##    return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 

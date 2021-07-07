@@ -1,7 +1,11 @@
-# IDE
+## IDE
 .vscode/
 
+## data
+data/nltk/
 
 ## others
 model/
 logs/
+
+hw2/stud/.ipynb_checkpoints/

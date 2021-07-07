@@ -10,8 +10,8 @@ Source code in this repo is an extension of NLP TA's code (see [requirements](#r
 ## Extra material
 - **Additional data:**
     - [TODO]()
-- python `nltk` [WordNet interface](https://www.nltk.org/howto/wordnet.html)
-
+- python [nltk package](https://www.nltk.org)
+- python [textblob package](https://textblob.readthedocs.io/en/dev/index.html) 
 
 ## Requirements
 TA's code and other requirements to use this code are indicated [here](https://github.com/SapienzaNLP/nlp2021-hw2).

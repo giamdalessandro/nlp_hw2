@@ -1,5 +1,7 @@
 import os
+import re
 import json
+import collections
 
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
@@ -23,19 +25,66 @@ class ABSADataset(Dataset):
         self.dev_path    = dev_path
         self.batch_size  = batch_size
 
-    def _preprocess_data(self):
-        """
-        Preprocess sentence pairs dataset to obtain the (sent,gloss) couples (i.e. for each sentence 
-        match its (lemma,pos_tag) with all the gloss of all word senses available in WordNet).
-        """
-        return
+        self.__read_dataset(train_path)
 
-    def _preprocess_test_data(self):
+
+    def __tokenize_line(self, line: str, pattern='\W'):
         """
-        Preprocess test sentence pairs to obtain the (sent,gloss) couples (i.e. for each sentence 
-        match its (lemma,pos_tag) with all the word sense glosses available in WordNet).
+        Tokenizes a single line (e.g. "The pen is on the table" -> 
+        ["the, "pen", "is", "on", "the", "table"]).
         """
-        return
+        #tokens = nltk.word_tokenize(line)
+        return re.split(pattern, line) #.lower())
+
+    def __read_dataset(self, 
+            data_path: str,
+            vocab_size: int=1000, 
+            unk_token: str="<UNK>", 
+            sep_token: str="<SEP>", 
+            pad_token: str="<PAD>"
+        ):
+        """
+        Reads the dataset and builds a vocabulary over it.
+        """       
+        print(f"\n[INFO]: Loading data from '{data_path}'...")
+        sentences = []
+        labels    = []
+        words_list   = []
+        targets_list = []
+
+        with open(data_path, "r") as f:
+            json_data = json.load(f)
+            for entry in json_data:
+                # tokenize data sentences
+                text = self.__tokenize_line(entry["text"])
+                words_list.extend(text)
+
+                # get target words
+                targets = entry["targets"]
+                if len(targets) > 0:
+                    for tgt in targets:
+                        targets_list.append(tgt[1])
+
+                sentences.append(entry)
+                labels.append(targets)
+                
+
+        assert len(sentences) == len(labels)
+        print("sentence pairs:",len(sentences))
+        print("labels:",len(labels))
+
+        print("\n[INFO]: building vocabulary ...")
+        # count words occurency and frequency            
+        word_counter = collections.Counter(words_list)
+        self.distinct_words = len(word_counter)
+        print(f"Number of distinct words: {len(word_counter)}")
+        
+        # count target words occurency and frequency
+        tgts_counter = collections.Counter(targets_list)
+        self.distinct_tgts = len(tgts_counter)
+        print(f"Number of distinct targets: {len(tgts_counter)}")
+
+        return sentences, labels
 
     def __len__(self):
         # returns the number of samples in our dataset

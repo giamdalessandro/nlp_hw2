@@ -3,8 +3,10 @@ import re
 import json
 import collections
 
-from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
+from torch.utils.data import Dataset, DataLoader
+from torchtext.vocab import Vocab
+
 
 LAPTOP_TRAIN     = "data/laptops_train.json"
 LAPTOP_DEV       = "data/laptops_dev.json"
@@ -25,7 +27,7 @@ class ABSADataset(Dataset):
         self.dev_path    = dev_path
         self.batch_size  = batch_size
 
-        self.__read_dataset(train_path)
+        self.__build_vocab(train_path)
 
 
     def __tokenize_line(self, line: str, pattern='\W'):
@@ -33,14 +35,14 @@ class ABSADataset(Dataset):
         Tokenizes a single line (e.g. "The pen is on the table" -> 
         ["the, "pen", "is", "on", "the", "table"]).
         """
-        #tokens = nltk.word_tokenize(line)
-        return re.split(pattern, line) #.lower())
+        # TODO nltk tokenize
+        # TODO string to lower
+        return re.split(pattern, line.lower())
 
-    def __read_dataset(self, 
+    def __build_vocab(self, 
             data_path: str,
             vocab_size: int=1000, 
             unk_token: str="<UNK>", 
-            sep_token: str="<SEP>", 
             pad_token: str="<PAD>"
         ):
         """
@@ -83,6 +85,9 @@ class ABSADataset(Dataset):
         tgts_counter = collections.Counter(targets_list)
         self.distinct_tgts = len(tgts_counter)
         print(f"Number of distinct targets: {len(tgts_counter)}")
+
+        self.vocabulary = Vocab(word_counter, max_size=vocab_size, specials=[pad_token,unk_token])
+
 
         return sentences, labels
 

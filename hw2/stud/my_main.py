@@ -3,7 +3,7 @@ import os
 import pytorch_lightning as pl
 pl.seed_everything(42, workers=True) 
 
-from utils_dataset import ABSADataset
+from utils_dataset import ABSADataset, RESTAURANT_TRAIN
 
 
 TRAIN      = False
@@ -12,4 +12,4 @@ BATCH_SIZE = 32
 
 
 
-train_dataset = ABSADataset()
+train_dataset = ABSADataset(train_path=RESTAURANT_TRAIN)

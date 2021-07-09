@@ -35,8 +35,8 @@ class ABSADataset(Dataset):
         Tokenizes a single line (e.g. "The pen is on the table" -> 
         ["the, "pen", "is", "on", "the", "table"]).
         """
-        # TODO nltk tokenize
-        # TODO string to lower
+        # TODO check nltk tokenize
+        # TODO check string not to lower
         return re.split(pattern, line.lower())
 
     def __build_vocab(self, 
@@ -46,7 +46,14 @@ class ABSADataset(Dataset):
             pad_token: str="<PAD>"
         ):
         """
-        Reads the dataset and builds a vocabulary over it.
+        Reads the dataset and builds a torchtext vocabulary over it. It adds the following 
+        attributes to the class: 
+            - self.distinct_words   # number of distinct words
+            - self.distinct_tgts    # number of distinct targets words
+    
+        Args:
+            - vocab_size: size of the vocabolary;
+            - unk_token : token to associate with unknown words;
         """       
         print(f"\n[INFO]: Loading data from '{data_path}'...")
         sentences = []
@@ -87,7 +94,6 @@ class ABSADataset(Dataset):
         print(f"Number of distinct targets: {len(tgts_counter)}")
 
         self.vocabulary = Vocab(word_counter, max_size=vocab_size, specials=[pad_token,unk_token])
-
 
         return sentences, labels
 

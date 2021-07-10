@@ -1,6 +1,7 @@
 import os
 
 import pytorch_lightning as pl
+import torch
 pl.seed_everything(42, workers=True) 
 
 from utils_dataset import ABSADataset, LAPTOP_TRAIN, RESTAURANT_TRAIN

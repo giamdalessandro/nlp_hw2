@@ -2,6 +2,7 @@ import os
 import re
 import json
 import collections
+import torch
 
 import torchtext
 import pytorch_lightning as pl
@@ -14,31 +15,34 @@ LAPTOP_DEV       = "data/laptops_dev.json"
 RESTAURANT_TRAIN = "data/restaurants_train.json"
 RESTAURANT_DEV   = "data/restaurants_dev.json"
 
-
-def load_GloVe_embeddings(name: str="6B", dim: int=50):
-    """
-    Loads GloVe-6B pre-trained word embeddings.
-    """
-    #vec.get_vecs_by_tokens(tokens, lower_case_backup=True)
-    return torchtext.vocab.GloVe(name=name, dim=dim)
     
-     
+def load_pretrained_embeddings(vocabulary: dict, max_size: int):
+    """
+    Loads pretrained word embeddings.
+    """
+    glove_vec = torchtext.vocab.GloVe(name="6B", dim=50)
+
+    pretrained = []
+    for k, v in vocabulary.stoi.items():
+        emb = glove_vec.get_vecs_by_tokens(k, lower_case_backup=True)
+        pretrained.append(emb) 
+
+    return torch.stack(pretrained, dim=0)
+
+
 class ABSADataset(Dataset):
     """
     Override of torch base Dataset class to proerly load ABSA data.
     """
     def __init__(self, 
             data_path : str=LAPTOP_TRAIN,
-            batch_size: int=32,
+            unk_token : str="<UNK>", 
+            pad_token : str="<PAD>"
         ):
         self.data_path  = data_path
-        self.batch_size = batch_size
+        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token)
 
-        self.embedding = load_GloVe_embeddings()
-        self.__build_vocab(data_path)
-
-
-    def __tokenize_line(self, line: str, pattern='\W'):
+    def _tokenize_line(self, line: str, pattern='\W'):
         """
         Tokenizes a single line (e.g. "The pen is on the table" -> 
         ["the, "pen", "is", "on", "the", "table"]).
@@ -47,9 +51,9 @@ class ABSADataset(Dataset):
         # TODO check string not to lower
         return re.split(pattern, line.lower())
 
-    def __build_vocab(self, 
+    def _build_vocab(self, 
             data_path : str,
-            vocab_size: int=3000, 
+            vocab_size: int=3500, 
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>"
         ):
@@ -58,10 +62,12 @@ class ABSADataset(Dataset):
         attributes to the class: 
             - self.distinct_words   # number of distinct words
             - self.distinct_tgts    # number of distinct targets words
+            - self.vocabulary
     
         Args:
-            - vocab_size: size of the vocabolary;
-            - unk_token : token to associate with unknown words;
+            - `vocab_size`: size of the vocabolary;
+            - `unk_token` : token to associate with unknown words;
+            - `pad_token` : token to indicate padding;
         """       
         print(f"\n[INFO]: Loading data from '{data_path}'...")
         sentences = []
@@ -73,7 +79,7 @@ class ABSADataset(Dataset):
             json_data = json.load(f)
             for entry in json_data:
                 # tokenize data sentences
-                text = self.__tokenize_line(entry["text"])
+                text = self._tokenize_line(entry["text"])
                 words_list.extend(text)
 
                 # get target words
@@ -100,8 +106,19 @@ class ABSADataset(Dataset):
         self.distinct_tgts = len(tgts_counter)
         print(f"Number of distinct targets: {len(tgts_counter)}")
 
-        self.vocabulary = Vocab(word_counter, max_size=vocab_size, specials=[pad_token,unk_token])
-
+        # load pretrained GloVe word embeddings
+        glove_vec = torchtext.vocab.GloVe(name="6B", dim=50, unk_init=torch.Tensor.normal_)
+        self.vocabulary = Vocab(
+            counter=word_counter, 
+            max_size=vocab_size,                 
+            specials=[pad_token,unk_token],      # special tokens
+            vectors=glove_vec                    # pre-trained embeddings
+        )
+        # ensure pad_token embedding is a zeros tensor
+        self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim])
+        print("Vocab vectors:", self.vocabulary.vectors.size())
+        
+        self.samples = zip(sentences,labels)
         return sentences, labels
 
     def __len__(self):
@@ -120,17 +137,20 @@ class ABSADataModule(pl.LightningDataModule):
     def __init__(self, 
             train_path: str=LAPTOP_TRAIN, 
             dev_path  : str=LAPTOP_DEV,
+            batch_size: int=32,
             mode      : str="restaurants"
         ):
         super().__init__()
         self.train_path = train_path
         self.dev_path = dev_path
+        self.batch_size = batch_size
         self.mode = mode
 
     def setup(self):
         """
         Initialize train and eval datasets from training
         """
+        # TODO check if need both dataset together
         self.train_laptop = ABSADataset(data_path=LAPTOP_TRAIN)
         self.eval_laptop  = ABSADataset(data_path=LAPTOP_DEV)
         self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)

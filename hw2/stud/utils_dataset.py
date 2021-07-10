@@ -32,20 +32,20 @@ def load_pretrained_embeddings(vocabulary: dict, max_size: int):
 
 class ABSADataset(Dataset):
     """
-    Override of torch base Dataset class to proerly load ABSA data.
+    Override of torch base Dataset class to proerly load ABSA restaurants and laptop data.
     """
     def __init__(self, 
             data_path : str=LAPTOP_TRAIN,
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>"
         ):
-        self.data_path  = data_path
+        self.data_path = data_path
         self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token)
 
     def _tokenize_line(self, line: str, pattern='\W'):
         """
-        Tokenizes a single line (e.g. "The pen is on the table" -> 
-        ["the, "pen", "is", "on", "the", "table"]).
+        Tokenizes a single line splitting on regex `\W`, i.e. non-word characters 
+        (e.g. "The pen is on the table" -> ["the, "pen", "is", "on", "the", "table"]).
         """
         # TODO check nltk tokenize
         # TODO check string not to lower
@@ -62,7 +62,7 @@ class ABSADataset(Dataset):
         attributes to the class: 
             - self.distinct_words   # number of distinct words
             - self.distinct_tgts    # number of distinct targets words
-            - self.vocabulary
+            - self.vocabulary       # torchtext.Vocab vocabulary over data
     
         Args:
             - `vocab_size`: size of the vocabolary;
@@ -109,8 +109,8 @@ class ABSADataset(Dataset):
         # load pretrained GloVe word embeddings
         glove_vec = torchtext.vocab.GloVe(name="6B", dim=50, unk_init=torch.Tensor.normal_)
         self.vocabulary = Vocab(
-            counter=word_counter, 
-            max_size=vocab_size,                 
+            counter=word_counter,                # (word,freq) mapping
+            max_size=vocab_size,                 # vocabulary max size
             specials=[pad_token,unk_token],      # special tokens
             vectors=glove_vec                    # pre-trained embeddings
         )

@@ -8,5 +8,10 @@ data/nltk/
 model/
 logs/
 
+## python
 hw2/stud/__pycache__/
 hw2/stud/.ipynb_checkpoints/
+
+## pre-trained embeddings
+hw2/stud/.vector_cache/
+.vector_cache/

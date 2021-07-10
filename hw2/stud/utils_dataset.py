@@ -3,6 +3,7 @@ import re
 import json
 import collections
 
+import torchtext
 import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
 from torchtext.vocab import Vocab
@@ -14,20 +15,27 @@ RESTAURANT_TRAIN = "data/restaurants_train.json"
 RESTAURANT_DEV   = "data/restaurants_dev.json"
 
 
+def load_GloVe_embeddings(name: str="6B", dim: int=50):
+    """
+    Loads GloVe-6B pre-trained word embeddings.
+    """
+    #vec.get_vecs_by_tokens(tokens, lower_case_backup=True)
+    return torchtext.vocab.GloVe(name=name, dim=dim)
+    
+     
 class ABSADataset(Dataset):
     """
     Override of torch base Dataset class to proerly load ABSA data.
     """
     def __init__(self, 
-            train_path: str=LAPTOP_TRAIN, 
-            dev_path  : str=LAPTOP_DEV, 
+            data_path : str=LAPTOP_TRAIN,
             batch_size: int=32,
         ):
-        self.train_path  = train_path
-        self.dev_path    = dev_path
-        self.batch_size  = batch_size
+        self.data_path  = data_path
+        self.batch_size = batch_size
 
-        self.__build_vocab(train_path)
+        self.embedding = load_GloVe_embeddings()
+        self.__build_vocab(data_path)
 
 
     def __tokenize_line(self, line: str, pattern='\W'):
@@ -40,10 +48,10 @@ class ABSADataset(Dataset):
         return re.split(pattern, line.lower())
 
     def __build_vocab(self, 
-            data_path: str,
-            vocab_size: int=1000, 
-            unk_token: str="<UNK>", 
-            pad_token: str="<PAD>"
+            data_path : str,
+            vocab_size: int=3000, 
+            unk_token : str="<UNK>", 
+            pad_token : str="<PAD>"
         ):
         """
         Reads the dataset and builds a torchtext vocabulary over it. It adds the following 
@@ -77,7 +85,6 @@ class ABSADataset(Dataset):
                 sentences.append(entry)
                 labels.append(targets)
                 
-
         assert len(sentences) == len(labels)
         print("sentence pairs:",len(sentences))
         print("labels:",len(labels))
@@ -113,17 +120,21 @@ class ABSADataModule(pl.LightningDataModule):
     def __init__(self, 
             train_path: str=LAPTOP_TRAIN, 
             dev_path  : str=LAPTOP_DEV,
+            mode      : str="restaurants"
         ):
         super().__init__()
-        self.train_path  = train_path
-        self.dev_path    = dev_path
+        self.train_path = train_path
+        self.dev_path = dev_path
+        self.mode = mode
 
     def setup(self):
         """
         Initialize train and eval datasets from training
         """
-        self.train_dataset = None
-        self.eval_dataset  = None
+        self.train_laptop = ABSADataset(data_path=LAPTOP_TRAIN)
+        self.eval_laptop  = ABSADataset(data_path=LAPTOP_DEV)
+        self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
+        self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 
     def test_setup(self, test_data: list):
         """
@@ -133,8 +144,10 @@ class ABSADataModule(pl.LightningDataModule):
         return
 
     def train_dataloader(self, *args, **kwargs):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size)
+        train_dataset = self.train_restaurant if self.mode == "restaurants" else self.train_laptop
+        return DataLoader(train_dataset, batch_size=self.batch_size)
 
     def eval_dataloader(self, *args, **kwargs):
-        return DataLoader(self.eval_dataset, batch_size=self.batch_size)
+        eval_dataset = self.eval_restaurant if self.mode == "restaurants" else self.eval_laptop
+        return DataLoader(eval_dataset, batch_size=self.batch_size)
 

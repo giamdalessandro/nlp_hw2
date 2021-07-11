@@ -44,10 +44,11 @@ class ABSADataset(Dataset):
     def __init__(self, 
             data_path : str=LAPTOP_TRAIN,
             unk_token : str="<UNK>", 
-            pad_token : str="<PAD>"
+            pad_token : str="<PAD>",
+            dev : bool=False
         ):
         self.data_path = data_path
-        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token)
+        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, dev=dev)
 
     def _tokenize_line(self, line: str, pattern='\W'):
         """
@@ -62,7 +63,8 @@ class ABSADataset(Dataset):
             data_path : str,
             vocab_size: int=3500, 
             unk_token : str="<UNK>", 
-            pad_token : str="<PAD>"
+            pad_token : str="<PAD>",
+            dev : bool=False
         ):
         """
         Reads the dataset and builds a torchtext vocabulary over it. It adds the following 
@@ -76,7 +78,7 @@ class ABSADataset(Dataset):
             - `unk_token` : token to associate with unknown words;
             - `pad_token` : token to indicate padding;
         """       
-        print(f"\n[INFO]: Loading data from '{data_path}'...")
+        print(f"\n[dataset]: Loading data from '{data_path}'...")
         sentences = []
         labels    = []
         words_list   = []
@@ -102,7 +104,6 @@ class ABSADataset(Dataset):
         print("sentence pairs:",len(sentences))
         print("labels:",len(labels))
 
-        print("\n[dataset]: building vocabulary ...")
         # count words occurency and frequency            
         word_counter = collections.Counter(words_list)
         self.distinct_words = len(word_counter)
@@ -113,17 +114,19 @@ class ABSADataset(Dataset):
         self.distinct_tgts = len(tgts_counter)
         print(f"Number of distinct targets: {len(tgts_counter)}")
 
-        # load pretrained GloVe word embeddings
-        glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.Tensor.normal_)
-        self.vocabulary = Vocab(
-            counter=word_counter,                # (word,freq) mapping
-            max_size=vocab_size,                 # vocabulary max size
-            specials=[pad_token,unk_token],      # special tokens
-            vectors=glove_vec                    # pre-trained embeddings
-        )
-        # ensure pad_token embedding is a zeros tensor
-        self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim])
-        print("Embedding vectors:", self.vocabulary.vectors.size())
+        if not dev:
+            print("\n[dataset]: building vocabulary ...")
+            # load pretrained GloVe word embeddings
+            glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.Tensor.normal_)
+            self.vocabulary = Vocab(
+                counter=word_counter,                # (word,freq) mapping
+                max_size=vocab_size,                 # vocabulary max size
+                specials=[pad_token,unk_token],      # special tokens
+                vectors=glove_vec                    # pre-trained embeddings
+            )
+            # ensure pad_token embedding is a zeros tensor
+            self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim])
+            print("Embedding vectors:", self.vocabulary.vectors.size())
         
         self.samples = zip(sentences,labels)
         return sentences, labels
@@ -139,29 +142,37 @@ class ABSADataset(Dataset):
 
 class ABSADataModule(pl.LightningDataModule):
     """ TODO
-    Override of pl.LightningDataModule class to easly handle ABSADataset for training and evaluation.
+    Override of pl.LightningDataModule class to easly handle the ABSADataset for training and evaluation.
     """
     def __init__(self, 
             train_path: str=LAPTOP_TRAIN, 
             dev_path  : str=LAPTOP_DEV,
             batch_size: int=32,
-            mode      : str="restaurants"
+            mode : str="single",
+            test : bool=False
         ):
         super().__init__()
         self.train_path = train_path
-        self.dev_path = dev_path
+        self.dev_path   = dev_path
         self.batch_size = batch_size
         self.mode = mode
+
+        if not test:
+            self.setup()
+        else:
+            self.test_setup()
 
     def setup(self):
         """
         Initialize train and eval datasets from training
         """
         # TODO check if need both dataset together
-        self.train_laptop = ABSADataset(data_path=LAPTOP_TRAIN)
-        self.eval_laptop  = ABSADataset(data_path=LAPTOP_DEV)
-        self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
-        self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
+        self.train_dataset = ABSADataset(data_path=self.train_path)
+        self.eval_dataset  = ABSADataset(data_path=self.dev_path, dev=True)
+        # store vocabulary attribute
+        self.vocabulary = self.train_dataset.vocabulary
+        #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
+        #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 
     def test_setup(self, test_data: list):
         """
@@ -171,10 +182,10 @@ class ABSADataModule(pl.LightningDataModule):
         return
 
     def train_dataloader(self, *args, **kwargs):
-        train_dataset = self.train_restaurant if self.mode == "restaurants" else self.train_laptop
-        return DataLoader(train_dataset, batch_size=self.batch_size)
+        #train_dataset = self.train_restaurant if self.mode == "restaurants" else self.train_laptop
+        return DataLoader(self.train_dataset, batch_size=self.batch_size)
 
     def eval_dataloader(self, *args, **kwargs):
-        eval_dataset = self.eval_restaurant if self.mode == "restaurants" else self.eval_laptop
-        return DataLoader(eval_dataset, batch_size=self.batch_size)
+        #eval_dataset = self.eval_restaurant if self.mode == "restaurants" else self.eval_laptop
+        return DataLoader(self.eval_dataset, batch_size=self.batch_size)
 

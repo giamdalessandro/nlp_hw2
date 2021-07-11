@@ -11,7 +11,6 @@ class TaskAModel(nn.Module):
         self.dropout = nn.Dropout(hparams.dropout)
         
         # word embeddings
-        print("initializing embeddings from pretrained ...")
         self.word_embedding = nn.Embedding.from_pretrained(embeddings)
 
         # Recurrent layer

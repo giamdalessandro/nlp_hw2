@@ -9,6 +9,7 @@ model/
 logs/
 
 ## python
+.ipynb_checkpoints/
 hw2/stud/__pycache__/
 hw2/stud/.ipynb_checkpoints/
 

@@ -20,13 +20,20 @@ def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     """
     Loads pretrained word embeddings.
     """
-    glove_vec = torchtext.vocab.GloVe(name="6B", dim=50)
+    # get GloVe 6B pre-trained word embeddings, of dimension 100
+    glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.Tensor.normal_)
 
     pretrained = []
-    for k, v in vocabulary.stoi.items():
-        emb = glove_vec.get_vecs_by_tokens(k, lower_case_backup=True)
+    for k, _ in vocabulary.stoi.items():
+        if k == "<PAD>":
+            emb = torch.zeros([glove_vec.dim])
+        elif k == "<UNK>":
+            emb = torch.rand([glove_vec.dim])
+        else:
+            emb = glove_vec.get_vecs_by_tokens(k, lower_case_backup=True)
         pretrained.append(emb) 
 
+    # return a tensor of size [vocab_size, emb_dim]
     return torch.stack(pretrained, dim=0)
 
 
@@ -107,7 +114,7 @@ class ABSADataset(Dataset):
         print(f"Number of distinct targets: {len(tgts_counter)}")
 
         # load pretrained GloVe word embeddings
-        glove_vec = torchtext.vocab.GloVe(name="6B", dim=50, unk_init=torch.Tensor.normal_)
+        glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.Tensor.normal_)
         self.vocabulary = Vocab(
             counter=word_counter,                # (word,freq) mapping
             max_size=vocab_size,                 # vocabulary max size
@@ -131,7 +138,7 @@ class ABSADataset(Dataset):
 
 
 class ABSADataModule(pl.LightningDataModule):
-    """
+    """ TODO
     Override of pl.LightningDataModule class to easly handle ABSADataset for training and evaluation.
     """
     def __init__(self, 

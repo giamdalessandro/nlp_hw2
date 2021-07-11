@@ -102,7 +102,7 @@ class ABSADataset(Dataset):
         print("sentence pairs:",len(sentences))
         print("labels:",len(labels))
 
-        print("\n[INFO]: building vocabulary ...")
+        print("\n[dataset]: building vocabulary ...")
         # count words occurency and frequency            
         word_counter = collections.Counter(words_list)
         self.distinct_words = len(word_counter)
@@ -123,7 +123,7 @@ class ABSADataset(Dataset):
         )
         # ensure pad_token embedding is a zeros tensor
         self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim])
-        print("Vocab vectors:", self.vocabulary.vectors.size())
+        print("Embedding vectors:", self.vocabulary.vectors.size())
         
         self.samples = zip(sentences,labels)
         return sentences, labels

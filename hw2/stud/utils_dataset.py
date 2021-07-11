@@ -157,7 +157,7 @@ class ABSADataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.mode = mode
 
-        if not test:
+        if test:
             self.setup()
         else:
             self.test_setup()

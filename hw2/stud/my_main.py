@@ -5,7 +5,7 @@ import torch
 pl.seed_everything(42, workers=True) 
 
 from utils_dataset import ABSADataModule, LAPTOP_TRAIN, LAPTOP_DEV
-from utils_classifier import TaskAModel
+from utils_classifier import TaskAModel, ABSALightningModule
 
 TRAIN      = False
 NUM_EPOCHS = 20
@@ -33,15 +33,12 @@ class HParams():
 	output_dim    = 10
 	bidirectional = True
 	num_layers = 1
-	dropout  = 0.0
+	dropout = 0.0
 
 	def __str__(self) -> str:
-		return f"Hyper-parameters: \n  \
-	embedding_dim : {self.embedding_dim} \n  \
-	vocab_size    : {self.vocab_size} \n  \
-	rnn_layers    : {self.num_layers} \n  \
-	bidirectional : {self.bidirectional} \n  \
-	hidden_dim    : {self.hidden_dim} \n  \
+		return f"Hyper-parameters: \n\tembedding_dim : {self.embedding_dim} \n     \
+	vocab_size    : {self.vocab_size} \n\trnn_layers    : {self.num_layers} \n     \
+	bidirectional : {self.bidirectional} \n\thidden_dim    : {self.hidden_dim} \n  \
 	output_dim    : {self.output_dim} \n"
 
 

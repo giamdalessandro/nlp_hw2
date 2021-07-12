@@ -5,26 +5,26 @@ import pytorch_lightning as pl
 
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input
-    def __init__(self, hparams, embeddings = None):
+    def __init__(self, hparams: dict, embeddings = None):
         super().__init__()
         print(hparams)
-        self.dropout = nn.Dropout(hparams.dropout)
+        self.dropout = nn.Dropout(hparams["dropout"])
         
         # word embeddings
         self.word_embedding = nn.Embedding.from_pretrained(embeddings)
 
         # Recurrent layer
         self.lstm = nn.LSTM(
-            input_size=hparams.embedding_dim, 
-            hidden_size=hparams.hidden_dim, 
-            bidirectional=hparams.bidirectional,
-            num_layers=hparams.num_layers, 
-            dropout=hparams.dropout if hparams.num_layers > 1 else 0
+            input_size=hparams["embedding_dim"], 
+            hidden_size=hparams["hidden_dim"], 
+            bidirectional=hparams["bidirectional"],
+            num_layers=hparams["num_layers"], 
+            dropout=hparams["dropout"] if hparams["num_layers"] > 1 else 0
         )
 
         # classifier head
-        lstm_output_dim = hparams.hidden_dim if hparams.bidirectional is False else hparams.hidden_dim * 2
-        self.classifier = nn.Linear(lstm_output_dim, hparams.output_dim)
+        lstm_output_dim = hparams["hidden_dim"] if hparams["bidirectional"] is False else hparams["hidden_dim"] * 2
+        self.classifier = nn.Linear(lstm_output_dim, hparams["output_dim"])
     
     def forward(self, x):
         embeddings = self.word_embedding(x)
@@ -45,6 +45,7 @@ class ABSALightningModule(pl.LightningModule):
         return    
 
     def forward(self, x):
+        # may add final one-hot encoding heres
         logits = self.model(x)
         predictions = torch.argmax(logits, -1)
         return logits, predictions
@@ -54,6 +55,7 @@ class ABSALightningModule(pl.LightningModule):
         return
 
     def validation_step(self, val_batch, batch_idx):
+        # x, y = train_batch
         return
 
     # TODO may be needed

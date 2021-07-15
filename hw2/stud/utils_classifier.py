@@ -82,7 +82,7 @@ class ABSALightningModule(pl.LightningModule):
         logits, _ = self.forward(x)
         # We adapt the logits and labels to fit the format required for the loss function
         logits = logits.view(-1, logits.shape[-1])
-        labels = y.view(-1).float()
+        labels = y.view(-1).long()
 
         # Compute the loss:
         loss = self.loss_function(logits, labels)
@@ -94,7 +94,7 @@ class ABSALightningModule(pl.LightningModule):
         logits, _ = self.forward(x)
         # We adapt the logits and labels to fit the format required for the loss function
         logits = logits.view(-1, logits.shape[-1])
-        labels = y.view(-1).float()
+        labels = y.view(-1).long()
         sample_loss = self.loss_function(logits, labels)
         self.log('valid_loss', sample_loss, prog_bar=True)
         return

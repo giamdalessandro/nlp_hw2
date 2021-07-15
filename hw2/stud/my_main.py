@@ -1,20 +1,17 @@
 import os
 
 import pytorch_lightning as pl
-import torch
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 pl.seed_everything(42, workers=True) 
 
 from utils_dataset import ABSADataModule, LAPTOP_TRAIN, LAPTOP_DEV
 from utils_classifier import TaskAModel, ABSALightningModule
 
 TRAIN      = False
-NUM_EPOCHS = 20
+NUM_EPOCHS = 5
 BATCH_SIZE = 32
 
-#train_laptop = ABSADataset(data_path=LAPTOP_TRAIN)
-#vocab_laptop = train_laptop.vocabulary
-#train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
-#vocab_restaurant = train_restaurant.vocabulary
+
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
@@ -29,11 +26,35 @@ hparams = {
 	"embedding_dim" : 100,
 	"vocab_size" : len(vocab_laptop),
 	"hidden_dim" : 128,
-	"output_dim" : 10,
-	"bidirectional" : True,
+	"output_dim" : 4,         # num of BILOU tags to predict
+ 	"bidirectional" : True,
 	"num_layers" : 1,
 	"dropout" : 0.0
 }
 
 print("\n[INFO]: Building model ...")
-model = TaskAModel(hparams=hparams, embeddings=vocab_laptop.vectors)
+# instanciate task-specific model
+task_model = TaskAModel(hparams=hparams, embeddings=vocab_laptop.vectors)
+# instanciate pl.LightningModule for training
+model = ABSALightningModule(task_model)
+
+#### set up Trainer and callbacks
+# checkpoint callback for pl.Trainer()
+ckpt_clbk = ModelCheckpoint(
+    monitor='train_loss',
+    mode='min',
+    dirpath="./model/pl_checkpoints/",
+    save_last=True,
+    save_top_k=3
+)
+logger = pl.loggers.TensorBoardLogger(save_dir='logs/')
+
+#### Training
+trainer = pl.Trainer(
+    gpus=1,
+    max_epochs=NUM_EPOCHS,
+    logger=logger,
+    callbacks=[ckpt_clbk],
+    progress_bar_refresh_rate=20
+)              
+trainer.fit(model, train_dataloader, eval_dataloader)

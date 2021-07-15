@@ -2,11 +2,13 @@ import os
 import re
 import json
 import collections
+from nltk import tag
 import torch
 
 import torchtext
 import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
+from torchtext import vocab
 from torchtext.vocab import Vocab
 
 
@@ -14,6 +16,13 @@ LAPTOP_TRAIN     = "data/laptops_train.json"
 LAPTOP_DEV       = "data/laptops_dev.json"
 RESTAURANT_TRAIN = "data/restaurants_train.json"
 RESTAURANT_DEV   = "data/restaurants_dev.json"
+
+BIO_TAGS = {
+    "B" : 1,
+    "I" : 2,
+    "L" : 3,
+    "O" : 0
+}
 
     
 def load_pretrained_embeddings(vocabulary: dict, max_size: int):
@@ -45,10 +54,11 @@ class ABSADataset(Dataset):
             data_path : str=LAPTOP_TRAIN,
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
-            dev : bool=False
+            dev : bool=False,
+            vocab=None
         ):
         self.data_path = data_path
-        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, dev=dev)
+        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, dev=dev, vocab=vocab)
 
     def _tokenize_line(self, line: str, pattern='\W'):
         """
@@ -59,12 +69,45 @@ class ABSADataset(Dataset):
         # TODO check string not to lower
         return re.split(pattern, line.lower())
 
+    def _tag_tokens(self, targets: list, tokens: list, tags: dict=BIO_TAGS):
+        """
+        Matches each token of the input text to the corresponding BILOU tag, 
+        and returns the tags vector/list.
+        """
+        if len(targets) > 0:
+            tags_list = []
+            for tgt in targets:
+                tgt_term = self._tokenize_line(tgt[1]) 
+                inside = False
+
+                for tok in tokens:
+                    if tok == tgt_term[0]: 
+                        tags_list.append(tags["B"])
+                        inside = True
+
+                    elif inside == True:
+                        if tok in tgt_term[1:-1]:
+                            tags_list.append(tags["I"])
+
+                        elif tok == tgt_term[-1]:
+                            tags_list.append(tags["L"])
+                            inside = False
+
+                    else:
+                        tags_list.append(tags["O"])
+            
+            return tags_list
+
+        else:
+            return [tags["O"] for t in tokens]
+
     def _build_vocab(self, 
             data_path : str,
             vocab_size: int=3500, 
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
-            dev : bool=False
+            dev : bool=False,
+            vocab=None
         ):
         """
         Reads the dataset and builds a torchtext vocabulary over it. It adds the following 
@@ -88,20 +131,27 @@ class ABSADataset(Dataset):
             json_data = json.load(f)
             for entry in json_data:
                 # tokenize data sentences
-                text = self._tokenize_line(entry["text"])
-                words_list.extend(text)
+                tokens = self._tokenize_line(entry["text"])
+                words_list.extend(tokens)
+                sentences.append(tokens)
 
-                # get target words
+                # count target words
                 targets = entry["targets"]
                 if len(targets) > 0:
                     for tgt in targets:
                         targets_list.append(tgt[1])
 
-                sentences.append(entry)
-                labels.append(targets)
+                # tag input tokens
+                tags = self._tag_tokens(targets, tokens)
+                labels.append(tags)
+
+                #print(tokens)
+                #print(tags)
+                #print(targets_list)
+                #break
                 
         assert len(sentences) == len(labels)
-        print("sentence pairs:",len(sentences))
+        print("sentences:",len(sentences))
         print("labels:",len(labels))
 
         # count words occurency and frequency            
@@ -127,8 +177,24 @@ class ABSADataset(Dataset):
             # ensure pad_token embedding is a zeros tensor
             self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim])
             print("Embedding vectors:", self.vocabulary.vectors.size())
+
+        else:
+            self.vocabulary = vocab
+
+        # create data samples -> (idxs, tags)
+        self.samples = []
+        for toks, tags in zip(sentences,labels):
+            tokens_idxs = []
+            for t in toks:
+                try:
+                    idx = self.vocabulary.stoi[t]
+                except:
+                    idx = self.vocabulary.stoi[unk_token]
+
+                tokens_idxs.append(idx)
+
+            self.samples.append((tokens_idxs,tags))
         
-        self.samples = zip(sentences,labels)
         return sentences, labels
 
     def __len__(self):
@@ -168,9 +234,9 @@ class ABSADataModule(pl.LightningDataModule):
         """
         # TODO check if need both dataset together
         self.train_dataset = ABSADataset(data_path=self.train_path)
-        self.eval_dataset  = ABSADataset(data_path=self.dev_path, dev=True)
-        # store vocabulary attribute
         self.vocabulary = self.train_dataset.vocabulary
+
+        self.eval_dataset  = ABSADataset(data_path=self.dev_path, dev=True, vocab=self.vocabulary)
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 

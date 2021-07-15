@@ -3,11 +3,31 @@ from torch import nn
 import pytorch_lightning as pl
 
 
+def print_hparams(hparam: dict):
+    print("\n[model]: hyperparameters ...")
+    for k, v in hparam.items():
+        print(f"{k}:\t{v}")
+    print()
+
+def rnn_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y) tuples)
+    """
+    X = []
+    y = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(elem[1])
+
+    return X, y
+
+
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input
     def __init__(self, hparams: dict, embeddings = None):
         super().__init__()
-        print(hparams)
+        print_hparams(hparams)
         self.dropout = nn.Dropout(hparams["dropout"])
         
         # word embeddings
@@ -23,7 +43,7 @@ class TaskAModel(nn.Module):
         )
 
         # classifier head
-        lstm_output_dim = hparams["hidden_dim"] if hparams["bidirectional"] is False else hparams["hidden_dim"] * 2
+        lstm_output_dim = hparams["hidden_dim"] if hparams["bidirectional"] is False else hparams["hidden_dim"]*2
         self.classifier = nn.Linear(lstm_output_dim, hparams["output_dim"])
     
     def forward(self, x):
@@ -42,6 +62,7 @@ class ABSALightningModule(pl.LightningModule):
     def __init__(self, model: nn.Module):
         super().__init__()
         self.model = model
+        self.loss_function = nn.CrossEntropyLoss()
         return    
 
     def forward(self, x):
@@ -51,16 +72,27 @@ class ABSALightningModule(pl.LightningModule):
         return logits, predictions
 
     def training_step(self, train_batch, batch_idx):
-        # x, y = train_batch
-        return
+        x, y = train_batch
+        # We receive one batch of data and perform a forward pass:
+        logits, _ = self.forward(x)
+        # We adapt the logits and labels to fit the format required for the loss function
+        logits = logits.view(-1, logits.shape[-1])
+        labels = y.view(-1)
+
+        # Compute the loss:
+        loss = self.loss_function(logits, labels)
+        self.log('train_loss', loss, prog_bar=True)
+        return loss
 
     def validation_step(self, val_batch, batch_idx):
-        # x, y = train_batch
+        x, y = val_batch
+        logits, _ = self.forward(x)
+        # We adapt the logits and labels to fit the format required for the loss function
+        logits = logits.view(-1, logits.shape[-1])
+        labels = y.view(-1)
+        sample_loss = self.loss_function(logits, labels)
+        self.log('valid_loss', sample_loss, prog_bar=True)
         return
-
-    # TODO may be needed
-    ##def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
-    ##    return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)

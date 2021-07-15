@@ -25,7 +25,7 @@ def rnn_collate_fn(data_elements: list):
     X = torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
     x_lens = torch.Tensor(x_lens)
     y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, y
+    return X, x_lens, y
 
 
 class TaskAModel(nn.Module):
@@ -36,7 +36,7 @@ class TaskAModel(nn.Module):
         self.dropout = nn.Dropout(hparams["dropout"])
         
         # 
-        self.word_embedding = nn.Embedding.from_pretrained(embeddings.long())
+        self.word_embedding = nn.Embedding.from_pretrained(embeddings)
 
         # Recurrent layer
         self.lstm = nn.LSTM(
@@ -52,7 +52,7 @@ class TaskAModel(nn.Module):
         self.classifier = nn.Linear(lstm_output_dim, hparams["output_dim"])
     
     def forward(self, x):
-        embeddings = self.word_embedding(x)
+        embeddings = self.word_embedding(x.long())
         embeddings = self.dropout(embeddings)
         o, (h, c) = self.lstm(embeddings)
         o = self.dropout(o)
@@ -77,7 +77,7 @@ class ABSALightningModule(pl.LightningModule):
         return logits, predictions
 
     def training_step(self, train_batch, batch_idx):
-        x, y = train_batch
+        x, x_lens, y = train_batch
         # We receive one batch of data and perform a forward pass:
         logits, _ = self.forward(x)
         # We adapt the logits and labels to fit the format required for the loss function
@@ -90,7 +90,7 @@ class ABSALightningModule(pl.LightningModule):
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        x, y = val_batch
+        x, x_lens, y = val_batch
         logits, _ = self.forward(x)
         # We adapt the logits and labels to fit the format required for the loss function
         logits = logits.view(-1, logits.shape[-1])

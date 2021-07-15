@@ -67,6 +67,7 @@ class ABSADataset(Dataset):
         """
         # TODO check nltk tokenize
         # TODO check string not to lower
+        line = re.sub("[^\W-]", " ", line)
         return re.split(pattern, line.lower())
 
     def _tag_tokens(self, targets: list, tokens: list, tags: dict=BIO_TAGS):
@@ -77,24 +78,30 @@ class ABSADataset(Dataset):
         if len(targets) > 0:
             tags_list = []
             for tgt in targets:
+                t_list = []
                 tgt_term = self._tokenize_line(tgt[1]) 
                 inside = False
 
                 for tok in tokens:
                     if tok == tgt_term[0]: 
-                        tags_list.append(tags["B"])
-                        inside = True
+                        t_list.append(tags["B"])
+                        if len(tgt_term) > 1:
+                            inside = True
 
                     elif inside == True:
                         if tok in tgt_term[1:-1]:
-                            tags_list.append(tags["I"])
+                            t_list.append(tags["I"])
 
                         elif tok == tgt_term[-1]:
-                            tags_list.append(tags["L"])
+                            t_list.append(tags["L"])
                             inside = False
 
+                        #t_list.append(tags["I"])
+
                     else:
-                        tags_list.append(tags["O"])
+                        t_list.append(tags["O"])
+
+                tags_list = t_list
             
             return tags_list
 
@@ -175,7 +182,7 @@ class ABSADataset(Dataset):
                 vectors=glove_vec                    # pre-trained embeddings
             )
             # ensure pad_token embedding is a zeros tensor
-            self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim])
+            self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim]).float()
             print("Embedding vectors:", self.vocabulary.vectors.size())
 
         else:
@@ -191,6 +198,8 @@ class ABSADataset(Dataset):
                 except:
                     idx = self.vocabulary.stoi[unk_token]
 
+                #print(toks, tags)
+                assert len(toks) == len(tags)
                 tokens_idxs.append(idx)
 
             self.samples.append((tokens_idxs,tags))

@@ -15,11 +15,16 @@ def rnn_collate_fn(data_elements: list):
     index sequences. (data_elements is a list of (x, y) tuples)
     """
     X = []
+    x_lens = []
     y = []
     for elem in data_elements:
-        X.append(elem[0])
-        y.append(elem[1])
+        X.append(torch.Tensor(elem[0]))
+        x_lens.append(len(elem[0]))
+        y.append(torch.Tensor(elem[1]))
 
+    X = torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
+    x_lens = torch.Tensor(x_lens)
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
     return X, y
 
 
@@ -30,8 +35,8 @@ class TaskAModel(nn.Module):
         print_hparams(hparams)
         self.dropout = nn.Dropout(hparams["dropout"])
         
-        # word embeddings
-        self.word_embedding = nn.Embedding.from_pretrained(embeddings)
+        # 
+        self.word_embedding = nn.Embedding.from_pretrained(embeddings.long())
 
         # Recurrent layer
         self.lstm = nn.LSTM(
@@ -77,7 +82,7 @@ class ABSALightningModule(pl.LightningModule):
         logits, _ = self.forward(x)
         # We adapt the logits and labels to fit the format required for the loss function
         logits = logits.view(-1, logits.shape[-1])
-        labels = y.view(-1)
+        labels = y.view(-1).float()
 
         # Compute the loss:
         loss = self.loss_function(logits, labels)
@@ -89,7 +94,7 @@ class ABSALightningModule(pl.LightningModule):
         logits, _ = self.forward(x)
         # We adapt the logits and labels to fit the format required for the loss function
         logits = logits.view(-1, logits.shape[-1])
-        labels = y.view(-1)
+        labels = y.view(-1).float()
         sample_loss = self.loss_function(logits, labels)
         self.log('valid_loss', sample_loss, prog_bar=True)
         return

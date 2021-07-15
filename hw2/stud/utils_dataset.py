@@ -24,7 +24,7 @@ BIO_TAGS = {
     "O" : 0
 }
 
-    
+
 def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     """
     Loads pretrained word embeddings.
@@ -167,7 +167,7 @@ class ABSADataset(Dataset):
         if not dev:
             print("\n[dataset]: building vocabulary ...")
             # load pretrained GloVe word embeddings
-            glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.Tensor.normal_)
+            glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.FloatTensor.normal_)
             self.vocabulary = Vocab(
                 counter=word_counter,                # (word,freq) mapping
                 max_size=vocab_size,                 # vocabulary max size
@@ -215,12 +215,14 @@ class ABSADataModule(pl.LightningDataModule):
             dev_path  : str=LAPTOP_DEV,
             batch_size: int=32,
             mode : str="single",
-            test : bool=False
+            test : bool=False,
+            collate_fn=None
         ):
         super().__init__()
         self.train_path = train_path
         self.dev_path   = dev_path
         self.batch_size = batch_size
+        self.collate_fn = collate_fn
         self.mode = mode
 
         if not test:
@@ -249,9 +251,9 @@ class ABSADataModule(pl.LightningDataModule):
 
     def train_dataloader(self, *args, **kwargs):
         #train_dataset = self.train_restaurant if self.mode == "restaurants" else self.train_laptop
-        return DataLoader(self.train_dataset, batch_size=self.batch_size)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
 
     def eval_dataloader(self, *args, **kwargs):
         #eval_dataset = self.eval_restaurant if self.mode == "restaurants" else self.eval_laptop
-        return DataLoader(self.eval_dataset, batch_size=self.batch_size)
+        return DataLoader(self.eval_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
 

@@ -5,7 +5,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 pl.seed_everything(42, workers=True) 
 
 from utils_dataset import ABSADataModule, LAPTOP_TRAIN, LAPTOP_DEV
-from utils_classifier import TaskAModel, ABSALightningModule
+from utils_classifier import TaskAModel, ABSALightningModule, rnn_collate_fn
 
 TRAIN      = False
 NUM_EPOCHS = 5
@@ -15,7 +15,7 @@ BATCH_SIZE = 32
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-data_module  = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=LAPTOP_DEV)
+data_module  = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=LAPTOP_DEV, collate_fn=rnn_collate_fn)
 vocab_laptop = data_module.vocabulary
 # instanciate dataloaders
 train_dataloader = data_module.train_dataloader()
@@ -34,7 +34,7 @@ hparams = {
 
 print("\n[INFO]: Building model ...")
 # instanciate task-specific model
-task_model = TaskAModel(hparams=hparams, embeddings=vocab_laptop.vectors)
+task_model = TaskAModel(hparams=hparams, embeddings=vocab_laptop.vectors.float())
 # instanciate pl.LightningModule for training
 model = ABSALightningModule(task_model)
 

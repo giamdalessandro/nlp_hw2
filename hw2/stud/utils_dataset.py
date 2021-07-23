@@ -3,8 +3,8 @@ import re
 import json
 import collections
 from nltk import tag
-import torch
 
+import torch
 import torchtext
 import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
@@ -102,9 +102,13 @@ class ABSADataset(Dataset):
                     else:
                         t_list.append(tags["O"])
 
-                tags_list = t_list
-            
-            return tags_list
+                tags_list.append(torch.Tensor(t_list))
+
+            tags_tensor = torch.stack(tags_list)
+            print("tags:", tags_tensor.size())
+            res = torch.min(tags_tensor, dim=0)
+            print("res:", res.values.size())
+            return list(res)
 
         else:
             return [tags["O"] for t in tokens]
@@ -199,7 +203,7 @@ class ABSADataset(Dataset):
                 except:
                     idx = self.vocabulary.stoi[unk_token]
 
-                #print(toks, tags)
+                print(toks, tags)
                 assert len(toks) == len(tags)
                 tokens_idxs.append(idx)
 

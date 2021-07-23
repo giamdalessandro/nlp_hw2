@@ -18,10 +18,11 @@ RESTAURANT_TRAIN = "data/restaurants_train.json"
 RESTAURANT_DEV   = "data/restaurants_dev.json"
 
 BIO_TAGS = {
-    "B" : 1,
-    "I" : 2,
-    "L" : 3,
-    "O" : 0
+    "pad": 0,
+    "B"  : 1,
+    "I"  : 2,
+    "L"  : 3,
+    "O"  : 4
 }
 
 

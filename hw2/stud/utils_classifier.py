@@ -1,4 +1,5 @@
 import torch
+import torchmetrics
 from torch import nn
 import pytorch_lightning as pl
 
@@ -33,6 +34,7 @@ class TaskAModel(nn.Module):
     def __init__(self, hparams: dict, embeddings = None):
         super().__init__()
         print_hparams(hparams)
+        self.softmax = nn.Softmax()
         self.dropout = nn.Dropout(hparams["dropout"])
         
         # 
@@ -44,7 +46,8 @@ class TaskAModel(nn.Module):
             hidden_size=hparams["hidden_dim"], 
             bidirectional=hparams["bidirectional"],
             num_layers=hparams["num_layers"], 
-            dropout=hparams["dropout"] if hparams["num_layers"] > 1 else 0
+            dropout=hparams["dropout"] if hparams["num_layers"] > 1 else 0,
+            batch_first=True
         )
 
         # classifier head
@@ -57,6 +60,7 @@ class TaskAModel(nn.Module):
         o, (h, c) = self.lstm(embeddings)
         o = self.dropout(o)
         output = self.classifier(o)
+        #output = self.softmax(output)
         return output
 
 
@@ -67,8 +71,9 @@ class ABSALightningModule(pl.LightningModule):
     def __init__(self, model: nn.Module):
         super().__init__()
         self.model = model
-        self.loss_function = nn.CrossEntropyLoss()
-        return    
+        self.loss_function = nn.CrossEntropyLoss(ignore_index=0)
+        self.f1_score = torchmetrics.F1(mdmc_average="global")
+        return
 
     def forward(self, x):
         # may add final one-hot encoding heres
@@ -79,22 +84,28 @@ class ABSALightningModule(pl.LightningModule):
     def training_step(self, train_batch, batch_idx):
         x, x_lens, y = train_batch
         # We receive one batch of data and perform a forward pass:
-        logits, _ = self.forward(x)
-        # We adapt the logits and labels to fit the format required for the loss function
+        logits, preds = self.forward(x)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
 
         # Compute the loss:
         loss = self.loss_function(logits, labels)
-        self.log('train_loss', loss, prog_bar=True)
+        self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
         x, x_lens, y = val_batch
-        logits, _ = self.forward(x)
-        # We adapt the logits and labels to fit the format required for the loss function
+        logits, preds = self.forward(x)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
+
+        # Compute F1 score
+        #print("logits:", logits.size())        
+        #print("labels:", labels.size())        
+        f1 = self.f1_score(preds, y.int())
+        self.log('f1_score', f1, prog_bar=True)
+
+        # Compute validation loss 
         sample_loss = self.loss_function(logits, labels)
         self.log('valid_loss', sample_loss, prog_bar=True)
         return

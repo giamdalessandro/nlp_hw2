@@ -3,6 +3,7 @@ import re
 import json
 import collections
 from nltk import tag
+from nltk.util import pr
 
 import torch
 import torchtext
@@ -68,10 +69,10 @@ class ABSADataset(Dataset):
         """
         # TODO check nltk tokenize
         # TODO check string not to lower
-        line = re.sub("[^\W-]", " ", line)
+        line = re.sub("[.,;:]", " ", line)
         return re.split(pattern, line.lower())
 
-    def _tag_tokens(self, targets: list, tokens: list, tags: dict=BIO_TAGS):
+    def _tag_tokens(self, targets: list, tokens: list, tags: dict=BIO_TAGS, verbose: bool=False):
         """
         Matches each token of the input text to the corresponding BILOU tag, 
         and returns the tags vector/list.
@@ -80,24 +81,28 @@ class ABSADataset(Dataset):
             tags_list = []
             for tgt in targets:
                 t_list = []
-                tgt_term = self._tokenize_line(tgt[1]) 
                 inside = False
+                found = False
+                tgt_terms = self._tokenize_line(tgt[1]) 
+                if verbose:
+                    print(tgt_terms)
 
-                for tok in tokens:
-                    if tok == tgt_term[0]: 
+                for i in range(len(tokens)):
+                    if tokens[i] == tgt_terms[0] and not found: 
                         t_list.append(tags["B"])
-                        if len(tgt_term) > 1:
+                        if len(tgt_terms) > 1 and tokens[i:i+len(tgt_terms)] == tgt_terms:
                             inside = True
+                            found = True
 
                     elif inside == True:
-                        if tok in tgt_term[1:-1]:
+                        if tokens[i] in tgt_terms[1:-1] and len(tgt_terms) > 2:
                             t_list.append(tags["I"])
 
-                        elif tok == tgt_term[-1]:
+                        elif tokens[i] == tgt_terms[-1]:
                             t_list.append(tags["L"])
                             inside = False
 
-                        #t_list.append(tags["I"])
+                        inside = False
 
                     else:
                         t_list.append(tags["O"])
@@ -105,10 +110,15 @@ class ABSADataset(Dataset):
                 tags_list.append(torch.Tensor(t_list))
 
             tags_tensor = torch.stack(tags_list)
-            print("tags:", tags_tensor.size())
             res = torch.min(tags_tensor, dim=0)
-            print("res:", res.values.size())
-            return list(res)
+            if verbose:
+                print("targets:", targets)
+                print("tokens:", tokens, "-- len:", len(tokens))
+                print("tags:", tags_list)
+                #print("tags:", tags_tensor.size())
+                #print("res:", res.values.size())
+            
+            return res.values
 
         else:
             return [tags["O"] for t in tokens]
@@ -144,6 +154,7 @@ class ABSADataset(Dataset):
             for entry in json_data:
                 # tokenize data sentences
                 tokens = self._tokenize_line(entry["text"])
+                #print(tokens)
                 words_list.extend(tokens)
                 sentences.append(tokens)
 
@@ -203,10 +214,10 @@ class ABSADataset(Dataset):
                 except:
                     idx = self.vocabulary.stoi[unk_token]
 
-                print(toks, tags)
                 assert len(toks) == len(tags)
                 tokens_idxs.append(idx)
 
+            #print(toks, tags)
             self.samples.append((tokens_idxs,tags))
         
         return sentences, labels

@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 pl.seed_everything(42, workers=True) 
 
-from utils_dataset import ABSADataModule, LAPTOP_TRAIN, LAPTOP_DEV, BIO_TAGS
+from utils_dataset import ABSADataModule, BIO_TAGS, LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
 from utils_classifier import TaskAModel, ABSALightningModule, rnn_collate_fn
 
 TRAIN      = False
@@ -47,7 +47,7 @@ def micro_macro_precision(model:pl.LightningModule, l_dataset:DataLoader, l_labe
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-data_module  = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=LAPTOP_DEV, collate_fn=rnn_collate_fn)
+data_module  = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, collate_fn=rnn_collate_fn)
 vocab_laptop = data_module.vocabulary
 # instanciate dataloaders
 train_dataloader = data_module.train_dataloader()
@@ -70,14 +70,14 @@ task_model = TaskAModel(hparams=hparams, embeddings=vocab_laptop.vectors.float()
 # instanciate pl.LightningModule for training
 model = ABSALightningModule(task_model)
 
-#### set up Trainer and callbacks
+#### Trainer
 # checkpoint callback for pl.Trainer()
 ckpt_clbk = ModelCheckpoint(
-    monitor='train_loss',
-    mode='min',
+    monitor='f1_score',
+    mode='max',
     dirpath="./model/pl_checkpoints/",
     save_last=True,
-    save_top_k=3
+    save_top_k=2
 )
 early_clbk = EarlyStopping(
     monitor='f1_score',
@@ -88,7 +88,7 @@ early_clbk = EarlyStopping(
 )
 logger = pl.loggers.TensorBoardLogger(save_dir='logs/')
 
-#### Training
+# training loop
 trainer = pl.Trainer(
     gpus=1,
     max_epochs=NUM_EPOCHS,

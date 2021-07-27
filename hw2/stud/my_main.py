@@ -47,7 +47,7 @@ def micro_macro_precision(model:pl.LightningModule, l_dataset:DataLoader, l_labe
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-data_module  = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, collate_fn=rnn_collate_fn)
+data_module  = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=rnn_collate_fn)
 vocab_laptop = data_module.vocabulary
 # instanciate dataloaders
 train_dataloader = data_module.train_dataloader()
@@ -55,13 +55,14 @@ eval_dataloader = data_module.eval_dataloader()
 
 #### set model hyper parameters
 hparams = {
-	"embedding_dim" : 100,
-	"vocab_size" : len(vocab_laptop),   # vocab length
-	"hidden_dim" : 128,                 # hidden layer dim
-	"output_dim" : len(BIO_TAGS),       # num of BILOU tags to predict
- 	"bidirectional" : True,
-	"num_layers" : 1,
-	"dropout" : 0.0
+	"embedding_dim" : 100,                 # embedding dimension
+	"vocab_size"    : len(vocab_laptop),   # vocab length
+	"lstm_dim"      : 128,                 # LSTM hidden layer dim
+    "hidden_dim"    : 128,                  # hidden linear layer dim
+	"output_dim"    : len(BIO_TAGS),       # num of BILOU tags to predict
+ 	"bidirectional" : True,                # if biLSTM
+	"rnn_layers"    : 1,
+	"dropout"       : 0.3
 }
 
 print("\n[INFO]: Building model ...")
@@ -73,17 +74,17 @@ model = ABSALightningModule(task_model)
 #### Trainer
 # checkpoint callback for pl.Trainer()
 ckpt_clbk = ModelCheckpoint(
-    monitor='f1_score',
-    mode='max',
+    monitor="macro_f1",
+    mode="max",
     dirpath="./model/pl_checkpoints/",
     save_last=True,
     save_top_k=2
 )
 early_clbk = EarlyStopping(
-    monitor='f1_score',
+    monitor="macro_f1",
     patience=5,
     verbose=True,
-    mode='max',
+    mode="max",
     check_on_train_epoch_end=True
 )
 logger = pl.loggers.TensorBoardLogger(save_dir='logs/')

@@ -50,7 +50,7 @@ def load_pretrained_embeddings(vocabulary: dict, max_size: int):
 
 class ABSADataset(Dataset):
     """
-    Override of torch base Dataset class to proerly load ABSA restaurants and laptop data.
+    Override of torch base Dataset class to proerly load ABSA restaurants or laptop data.
     """
     def __init__(self, 
             data_path : str=LAPTOP_TRAIN,
@@ -93,9 +93,9 @@ class ABSADataset(Dataset):
                         t_list.append(tags["B"])
                         if len(tgt_terms) > 1 and tokens[i:i+len(tgt_terms)] == tgt_terms:
                             # check if the matching token is not a repetition of the term
-                            # and is the actual target term  
+                            # and is the actual target term, if so the correct sequence is found 
                             inside = True
-                            found = True
+                            found  = True
 
                     elif inside == True:
                         # multi words terms

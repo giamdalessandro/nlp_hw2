@@ -43,24 +43,25 @@ class TaskAModel(nn.Module):
         # Recurrent layer
         self.lstm = nn.LSTM(
             input_size=hparams["embedding_dim"], 
-            hidden_size=hparams["hidden_dim"], 
+            hidden_size=hparams["lstm_dim"], 
             bidirectional=hparams["bidirectional"],
-            num_layers=hparams["num_layers"], 
-            dropout=hparams["dropout"] if hparams["num_layers"] > 1 else 0,
+            num_layers=hparams["rnn_layers"], 
+            dropout=hparams["dropout"] if hparams["rnn_layers"] > 1 else 0,
             batch_first=True
         )
 
         # classifier head
-        lstm_output_dim = hparams["hidden_dim"] if hparams["bidirectional"] is False else hparams["hidden_dim"]*2
-        self.classifier = nn.Linear(lstm_output_dim, hparams["output_dim"])
+        lstm_output_dim = hparams["lstm_dim"] if hparams["bidirectional"] is False else hparams["lstm_dim"]*2
+        self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
+        self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
     def forward(self, x):
         embeddings = self.word_embedding(x.long())
         embeddings = self.dropout(embeddings)
         o, (h, c) = self.lstm(embeddings)
         o = self.dropout(o)
-        output = self.classifier(o)
-        #output = self.softmax(output)
+        hidden = self.hidden(o)
+        output = self.output(hidden)
         return output
 
 
@@ -71,8 +72,21 @@ class ABSALightningModule(pl.LightningModule):
     def __init__(self, model: nn.Module):
         super().__init__()
         self.model = model
+
+        # task A metrics
         self.loss_function = nn.CrossEntropyLoss(ignore_index=0)
-        self.f1_score = torchmetrics.F1(mdmc_average="global")
+        self.micro_f1 = torchmetrics.F1(
+            num_classes=5,
+            average="micro",
+            mdmc_average="global",
+            ignore_index=0
+        )
+        self.macro_f1 = torchmetrics.F1(
+            num_classes=5,
+            average="macro",
+            mdmc_average="global",
+            ignore_index=0
+        )
         return
 
     def forward(self, x):
@@ -98,16 +112,19 @@ class ABSALightningModule(pl.LightningModule):
         logits, preds = self.forward(x)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
-
-        # Compute F1 score
         #print("logits:", logits.size())        
         #print("labels:", labels.size())        
-        f1 = self.f1_score(preds, y.int())
-        self.log('f1_score', f1, prog_bar=True)
+
+        # Compute F1 score
+        micro_f1 = self.micro_f1(preds, y.int())
+        self.log('micro_f1', micro_f1, prog_bar=True)
+
+        macro_f1 = self.macro_f1(preds, y.int())
+        self.log('macro_f1', macro_f1, prog_bar=True)
 
         # Compute validation loss 
         sample_loss = self.loss_function(logits, labels)
-        self.log('valid_loss', sample_loss, prog_bar=True)
+        self.log('valid_loss', sample_loss, prog_bar=True, on_epoch=True)
         return
 
     def configure_optimizers(self):

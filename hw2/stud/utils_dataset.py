@@ -82,33 +82,42 @@ class ABSADataset(Dataset):
             for tgt in targets:
                 t_list = []
                 inside = False
-                found = False
+                found  = False
                 tgt_terms = self._tokenize_line(tgt[1]) 
                 if verbose:
                     print(tgt_terms)
 
                 for i in range(len(tokens)):
                     if tokens[i] == tgt_terms[0] and not found: 
+                        # token is the beginning (B) of target terms sequence
                         t_list.append(tags["B"])
                         if len(tgt_terms) > 1 and tokens[i:i+len(tgt_terms)] == tgt_terms:
+                            # check if the matching token is not a repetition of the term
+                            # and is the actual target term  
                             inside = True
                             found = True
 
                     elif inside == True:
+                        # multi words terms
                         if tokens[i] in tgt_terms[1:-1] and len(tgt_terms) > 2:
+                            # token is inside (I) the target terms sequence
                             t_list.append(tags["I"])
 
                         elif tokens[i] == tgt_terms[-1]:
+                            # token is the last (L) target term
                             t_list.append(tags["L"])
                             inside = False
 
+                        # when the last tgt_word is repeated inside the tgt_terms 
                         inside = False
 
                     else:
+                        # token is outside (O) the target terms sequence
                         t_list.append(tags["O"])
 
                 tags_list.append(torch.Tensor(t_list))
 
+            # merge tags
             tags_tensor = torch.stack(tags_list)
             res = torch.min(tags_tensor, dim=0)
             if verbose:

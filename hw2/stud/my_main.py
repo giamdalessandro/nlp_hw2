@@ -14,7 +14,7 @@ TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 # testing config name
-SAVE_NAME = "basic_allBiLSTM_res2lap_2FF_noDropout"
+SAVE_NAME = "basic_allBiLSTM_res2lap_2FF64_BIO"
 
 def compute_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
     model.freeze()
@@ -76,20 +76,20 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-data_module  = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=rnn_collate_fn)
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=rnn_collate_fn)
 train_vocab = data_module.vocabulary
 # instanciate dataloaders
 train_dataloader = data_module.train_dataloader()
-eval_dataloader = data_module.eval_dataloader()
+eval_dataloader  = data_module.eval_dataloader()
 
 #### set model hyper parameters
 hparams = {
 	"embedding_dim" : 100,                 # embedding dimension
 	"vocab_size"    : len(train_vocab),    # vocab length
 	"lstm_dim"      : 128,                 # LSTM hidden layer dim
-    "hidden_dim"    : 128,                 # hidden linear layer dim
+    "hidden_dim"    : 64,                 # hidden linear layer dim
 	"output_dim"    : len(BIO_TAGS),       # num of BILOU tags to predict
- 	"bidirectional" : True,                # if biLSTM
+ 	"bidirectional" : True,                # if biLSTM or LSTM
 	"rnn_layers"    : 1,
 	"dropout"       : 0.3
 }
@@ -99,6 +99,7 @@ print("\n[INFO]: Building model ...")
 task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
 # instanciate pl.LightningModule for training
 model = ABSALightningModule(task_model)
+
 
 #### Trainer
 # checkpoint and early stopping callback for pl.Trainer()

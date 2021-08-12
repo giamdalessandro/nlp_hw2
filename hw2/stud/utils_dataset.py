@@ -113,7 +113,7 @@ class ABSADataset(Dataset):
 
                         elif tokens[i] == tgt_terms[-1]:
                             # token is the last (L) target term
-                            t_list.append(tags["L"])
+                            t_list.append(tags["I"]) # tags["L"] 
                             inside = False
 
                         # when the last tgt_word is repeated inside the tgt_terms 

@@ -38,20 +38,16 @@ def get_preds_terms(preds, tokens):
     Extract predicted aspect terms from predicted tags sequence (batch-wise).
     """
     #print("\npreds:",preds.size())
-    #print(tokens)
     #print("tokens:", len(tokens))
-    
     pred_terms = []
     for b in range(len(preds)):
-        #print("tokens:", len(tokens[b]))
         #print("preds:", preds[b])
-        i = 0
-        for p in range(len(preds[b])):
+        for p in range(len(tokens[b])): # len(tokens)
             if preds[b][p] != 0 and preds[b][p] != 4:
-                pred_terms.append(tokens[b][i])
-                i += 1
+                pred_terms.append(tokens[b][p])
 
     return pred_terms
+
 
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input

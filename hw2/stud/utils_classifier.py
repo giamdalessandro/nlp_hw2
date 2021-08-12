@@ -1,9 +1,9 @@
-from pandas.core.accessor import register_index_accessor
 import torch
 import torchmetrics
 from torch import nn
-import pytorch_lightning as pl
 
+import pytorch_lightning as pl
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 def print_hparams(hparam: dict):
     print("\n[model]: hyperparameters ...")
@@ -84,6 +84,43 @@ class TaskAModel(nn.Module):
         output = self.output(hidden)
         return output
 
+class TaskATransformerModel(nn.Module):
+    # we provide the hyperparameters as input
+    def __init__(self, hparams: dict, embeddings = None):
+        super().__init__()
+        print_hparams(hparams)
+        self.softmax = nn.Softmax()
+        self.dropout = nn.Dropout(hparams["dropout"])
+
+        self.tokenizer = AutoTokenizer.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
+        self.model = AutoModelForSequenceClassification.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
+
+        # Recurrent layer
+        self.lstm = nn.LSTM(
+            input_size=hparams["embedding_dim"], 
+            hidden_size=hparams["lstm_dim"], 
+            bidirectional=hparams["bidirectional"],
+            num_layers=hparams["rnn_layers"], 
+            dropout=hparams["dropout"] if hparams["rnn_layers"] > 1 else 0,
+            batch_first=True
+        )
+
+        # classifier head
+        lstm_output_dim = hparams["lstm_dim"] if hparams["bidirectional"] is False else hparams["lstm_dim"]*2
+        self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
+        self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
+    
+    def forward(self, x):
+        tokens = self.tokenizer(x.long())
+        embeddings = self.model(tokens)
+
+        embeddings = self.dropout(embeddings)
+        o, (h, c) = self.lstm(embeddings)
+        o = self.dropout(o)
+        hidden = self.hidden(o)
+        output = self.output(hidden)
+        return output
+
 
 class ABSALightningModule(pl.LightningModule):
     """
@@ -110,7 +147,7 @@ class ABSALightningModule(pl.LightningModule):
         return
 
     def forward(self, x):
-        # may add final one-hot encoding heres
+        # add output processing
         logits = self.model(x)
         predictions = torch.argmax(logits, -1)
         return logits, predictions

@@ -8,13 +8,14 @@ pl.seed_everything(42, workers=True)
 
 from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
-from utils_classifier import TaskAModel, ABSALightningModule, rnn_collate_fn, get_preds_terms
+from utils_classifier import TaskAModel, TaskATransformerModel, ABSALightningModule, \
+                        rnn_collate_fn, get_preds_terms
 
 TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 # testing config name
-SAVE_NAME = "basic_allBiLSTM_res2lap_2FF64_BIO"
+SAVE_NAME = "transf_allRnn_res2lap_2FF64_BIO"
 
 def compute_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
     model.freeze()
@@ -96,7 +97,9 @@ hparams = {
 
 print("\n[INFO]: Building model ...")
 # instanciate task-specific model
-task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
+#task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
+task_model = TaskATransformerModel(hparams=hparams)
+
 # instanciate pl.LightningModule for training
 model = ABSALightningModule(task_model)
 

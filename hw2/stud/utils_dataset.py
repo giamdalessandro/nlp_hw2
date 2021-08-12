@@ -26,6 +26,14 @@ BIO_TAGS = {
     "O"  : 4
 }
 
+IDX2LABEL = {
+    0 : "pad",
+    1 : "B",
+    2 : "I",
+    3 : "L",
+    4 : "O"
+}
+
 
 def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     """
@@ -215,7 +223,7 @@ class ABSADataset(Dataset):
 
         # create data samples -> (idxs, tags)
         self.samples = []
-        for toks, tags in zip(sentences,labels):
+        for toks, tags, terms in zip(sentences,labels,targets_list):
             tokens_idxs = []
             for t in toks:
                 try:
@@ -227,7 +235,7 @@ class ABSADataset(Dataset):
                 tokens_idxs.append(idx)
 
             #print(toks, tags)
-            self.samples.append((tokens_idxs,tags))
+            self.samples.append((tokens_idxs,tags,toks,self._tokenize_line(terms)))
         
         return sentences, labels
 

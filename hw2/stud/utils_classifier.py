@@ -1,3 +1,4 @@
+from pandas.core.accessor import register_index_accessor
 import torch
 import torchmetrics
 from torch import nn
@@ -13,21 +14,44 @@ def print_hparams(hparam: dict):
 def rnn_collate_fn(data_elements: list):
     """
     Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y) tuples)
+    index sequences. (data_elements is a list of (x, y, token, terms) tuples)
     """
     X = []
     x_lens = []
     y = []
+    tokens = []
+    terms = []
     for elem in data_elements:
         X.append(torch.Tensor(elem[0]))
         x_lens.append(len(elem[0]))
         y.append(torch.Tensor(elem[1]))
+        tokens.append(elem[2])
+        terms.append(elem[3])
 
     X = torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
     x_lens = torch.Tensor(x_lens)
     y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, x_lens, y
+    return X, x_lens, y, tokens, terms
 
+def get_preds_terms(preds, tokens):
+    """
+    Extract predicted aspect terms from predicted tags sequence (batch-wise).
+    """
+    #print("\npreds:",preds.size())
+    #print(tokens)
+    #print("tokens:", len(tokens))
+    
+    pred_terms = []
+    for b in range(len(preds)):
+        #print("tokens:", len(tokens[b]))
+        #print("preds:", preds[b])
+        i = 0
+        for p in range(len(preds[b])):
+            if preds[b][p] != 0 and preds[b][p] != 4:
+                pred_terms.append(tokens[b][i])
+                i += 1
+
+    return pred_terms
 
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input
@@ -96,7 +120,7 @@ class ABSALightningModule(pl.LightningModule):
         return logits, predictions
 
     def training_step(self, train_batch, batch_idx):
-        x, x_lens, y = train_batch
+        x, x_lens, y, _, _ = train_batch
         # We receive one batch of data and perform a forward pass:
         logits, preds = self.forward(x)
         logits = logits.view(-1, logits.shape[-1])
@@ -108,7 +132,7 @@ class ABSALightningModule(pl.LightningModule):
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        x, x_lens, y = val_batch
+        x, x_lens, y, _, _ = val_batch
         logits, preds = self.forward(x)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()

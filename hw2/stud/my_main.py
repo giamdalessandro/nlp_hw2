@@ -6,28 +6,29 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 pl.seed_everything(42, workers=True) 
 
-from utils_dataset import ABSADataModule, BIO_TAGS, LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
-from utils_classifier import TaskAModel, ABSALightningModule, rnn_collate_fn
+from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
+                        LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
+from utils_classifier import TaskAModel, ABSALightningModule, rnn_collate_fn, get_preds_terms
 
 TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
+# testing config name
+SAVE_NAME = "basic_allBiLSTM_res2lap_2FF_noDropout"
 
-def micro_macro_precision(model:pl.LightningModule, l_dataset:DataLoader, l_label_vocab=BIO_TAGS):
+def compute_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
     model.freeze()
     all_predictions = []
     all_labels = []
-
-    for elem in l_dataset:
-        idx_in  = elem[0]
-        idx_out = elem[1]
-        _, predictions = model(idx_in)
-        predictions = predictions #.view(-1)
-        labels = idx_out.view(-1)
-        valid_label = labels != 0
+    for indexed_elem in l_dataset:
+        indexed_in, _, indexed_labels, _, _ = indexed_elem
+        predictions, _ = model(indexed_in)
+        predictions = torch.argmax(predictions, -1).view(-1)
+        labels = indexed_labels.view(-1)
+        valid_indices = labels != 0
         
-        valid_predictions = predictions[valid_label]
-        valid_labels = labels[valid_label]
+        valid_predictions = predictions[valid_indices]
+        valid_labels = labels[valid_indices]
         
         all_predictions.extend(valid_predictions.tolist())
         all_labels.extend(valid_labels.tolist())
@@ -36,19 +37,47 @@ def micro_macro_precision(model:pl.LightningModule, l_dataset:DataLoader, l_labe
     micro_precision = precision_score(all_labels, all_predictions, average="micro", zero_division=0)
     # precision per class and arithmetic average of them. Does not take into account class imbalance.
     macro_precision = precision_score(all_labels, all_predictions, average="macro", zero_division=0)
-    class_precision = precision_score(all_labels, all_predictions, labels = list(range(len(l_label_vocab))), 
-                                        average=None, zero_division=0)
+    per_class_precision = precision_score(all_labels, all_predictions, labels=list(range(len(l_label_vocab))),
+                                         average=None, zero_division=0)
     model.unfreeze()
     return {"micro_precision":micro_precision,
             "macro_precision":macro_precision, 
-            "per_class_precision":class_precision}
+            "per_class_precision":per_class_precision}
 
+def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
+    model.freeze()
+    scores = {"tp": 0, "fp": 0, "fn": 0}
+    for elem in l_dataset:
+        inputs, _, labels, tokens, l_terms = elem
+        _, preds = model(inputs)
+
+        t_preds = get_preds_terms(preds, tokens)
+        #print(t_preds)
+        ll = []
+        for b in l_terms:
+            for l in b:
+                ll.append(l)
+
+        pred_terms  = {i for i in t_preds}
+        label_terms = {t for t in ll}
+
+        scores["tp"] += len(pred_terms & label_terms)
+        scores["fp"] += len(pred_terms - label_terms)
+        scores["fn"] += len(label_terms - pred_terms)
+
+    precision = 100*scores["tp"] / (scores["tp"] + scores["fp"])
+    recall = 100*scores["tp"] / (scores["tp"] + scores["fn"])
+    f1 = 2 * precision*recall / (precision+recall)
+
+    print(f"Aspect Extraction Evaluation")
+    print(f"\tAspects\t TP: {scores['tp']};\tFP: {scores['fp']};\tFN: {scores['fn']}")
+    print(f"\t\tprecision: {precision:.2f};\trecall: {recall:.2f};\tf1: {f1:.2f}")
 
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
 data_module  = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=rnn_collate_fn)
-vocab_laptop = data_module.vocabulary
+train_vocab = data_module.vocabulary
 # instanciate dataloaders
 train_dataloader = data_module.train_dataloader()
 eval_dataloader = data_module.eval_dataloader()
@@ -56,9 +85,9 @@ eval_dataloader = data_module.eval_dataloader()
 #### set model hyper parameters
 hparams = {
 	"embedding_dim" : 100,                 # embedding dimension
-	"vocab_size"    : len(vocab_laptop),   # vocab length
+	"vocab_size"    : len(train_vocab),    # vocab length
 	"lstm_dim"      : 128,                 # LSTM hidden layer dim
-    "hidden_dim"    : 128,                  # hidden linear layer dim
+    "hidden_dim"    : 128,                 # hidden linear layer dim
 	"output_dim"    : len(BIO_TAGS),       # num of BILOU tags to predict
  	"bidirectional" : True,                # if biLSTM
 	"rnn_layers"    : 1,
@@ -67,12 +96,12 @@ hparams = {
 
 print("\n[INFO]: Building model ...")
 # instanciate task-specific model
-task_model = TaskAModel(hparams=hparams, embeddings=vocab_laptop.vectors.float())
+task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
 # instanciate pl.LightningModule for training
 model = ABSALightningModule(task_model)
 
 #### Trainer
-# checkpoint callback for pl.Trainer()
+# checkpoint and early stopping callback for pl.Trainer()
 ckpt_clbk = ModelCheckpoint(
     monitor="macro_f1",
     mode="max",
@@ -87,7 +116,7 @@ early_clbk = EarlyStopping(
     mode="max",
     check_on_train_epoch_end=True
 )
-logger = pl.loggers.TensorBoardLogger(save_dir='logs/')
+logger = pl.loggers.TensorBoardLogger(save_dir='logs/', name=SAVE_NAME)
 
 # training loop
 trainer = pl.Trainer(
@@ -100,14 +129,18 @@ trainer = pl.Trainer(
 trainer.fit(model, train_dataloader, eval_dataloader)
 
 
+
 #### compute performances
-"""
-precisions = micro_macro_precision(model, eval_dataloader)
+print("\n[INFO]: precison metrics ...")
+precisions = compute_metrics(model, eval_dataloader, BIO_TAGS)
 per_class_precision = precisions["per_class_precision"]
 print(f"Micro Precision: {precisions['micro_precision']}")
 print(f"Macro Precision: {precisions['macro_precision']}")
 print("Per class Precision:")
+print("\tlabel\tscore")
 for idx_class, precision in sorted(enumerate(per_class_precision), key=lambda elem: -elem[1]):
-    label = BIO_TAGS[idx_class]
-    print(label, precision)
-"""
+    label = IDX2LABEL[idx_class]
+    print(f"\t{label}\t{precision:.4f}")
+
+print("\n[INFO]: evaluate extraction  ...")
+evaluate_extraction(model, eval_dataloader)

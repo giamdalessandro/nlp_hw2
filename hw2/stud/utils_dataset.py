@@ -140,26 +140,10 @@ class ABSADataset(Dataset):
         else:
             return [tags["O"] for t in tokens]
 
-    def _build_vocab(self, 
-            data_path : str,
-            vocab_size: int=3500, 
-            unk_token : str="<UNK>", 
-            pad_token : str="<PAD>",
-            dev : bool=False,
-            vocab=None
-        ):
+    def _read_data(self, data_path : str):
         """
-        Reads the dataset and builds a torchtext vocabulary over it. It adds the following 
-        attributes to the class: 
-            - self.distinct_words   # number of distinct words
-            - self.distinct_tgts    # number of distinct targets words
-            - self.vocabulary       # torchtext.Vocab vocabulary over data
-    
-        Args:
-            - `vocab_size`: size of the vocabolary;
-            - `unk_token` : token to associate with unknown words;
-            - `pad_token` : token to indicate padding;
-        """       
+        Reads the dataset and analyze words and target frequencies. 
+        """
         print(f"\n[dataset]: Loading data from '{data_path}'...")
         sentences = []
         labels    = []
@@ -184,11 +168,6 @@ class ABSADataset(Dataset):
                 # tag input tokens
                 tags = self._tag_tokens(targets, tokens)
                 labels.append(tags)
-
-                #print(tokens)
-                #print(tags)
-                #print(targets_list)
-                #break
                 
         assert len(sentences) == len(labels)
         print("sentences:",len(sentences))
@@ -204,7 +183,31 @@ class ABSADataset(Dataset):
         self.distinct_tgts = len(tgts_counter)
         print(f"Number of distinct targets: {len(tgts_counter)}")
 
-        if not dev:
+        return sentences, labels, targets_list, word_counter
+    
+    def _build_vocab(self, 
+            data_path : str,
+            vocab_size: int=3500, 
+            unk_token : str="<UNK>", 
+            pad_token : str="<PAD>",
+            dev : bool=False,
+            vocab=None
+        ):
+        """
+        Builds a torchtext vocabulary over read data. It adds the following 
+        attributes to the class: 
+            - self.distinct_words   # number of distinct words
+            - self.distinct_tgts    # number of distinct targets words
+            - self.vocabulary       # torchtext.Vocab vocabulary over data
+    
+        Args:
+            - `vocab_size`: size of the vocabolary;
+            - `unk_token` : token to associate with unknown words;
+            - `pad_token` : token to indicate padding;
+        """       
+        sentences, labels, targets_list, word_counter = self._read_data(data_path)
+
+        if vocab is None:
             print("\n[dataset]: building vocabulary ...")
             # load pretrained GloVe word embeddings
             glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.FloatTensor.normal_)
@@ -219,6 +222,7 @@ class ABSADataset(Dataset):
             print("Embedding vectors:", self.vocabulary.vectors.size())
 
         else:
+            print("\n[dataset]: (dev) using train vocabulary ...")
             self.vocabulary = vocab
 
         # create data samples -> (idxs, tags)
@@ -237,7 +241,7 @@ class ABSADataset(Dataset):
             #print(toks, tags)
             self.samples.append((tokens_idxs,tags,toks,self._tokenize_line(terms)))
         
-        return sentences, labels
+        return
 
     def __len__(self):
         # returns the number of samples in our dataset
@@ -280,7 +284,7 @@ class ABSADataModule(pl.LightningDataModule):
         self.train_dataset = ABSADataset(data_path=self.train_path)
         self.vocabulary = self.train_dataset.vocabulary
 
-        self.eval_dataset  = ABSADataset(data_path=self.dev_path, dev=True, vocab=self.vocabulary)
+        self.eval_dataset  = ABSADataset(data_path=self.dev_path, vocab=self.vocabulary)
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 

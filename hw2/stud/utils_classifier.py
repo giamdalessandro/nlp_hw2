@@ -48,6 +48,23 @@ def get_preds_terms(preds, tokens):
 
     return pred_terms
 
+def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
+    # useless if not averaging rnn output
+    clean_batch = []
+    last_idxs = lenghts - 1
+    rnn_out = rnn_out[0]
+    print("rnn out size:", rnn_out.size())
+    batch_size = rnn_out.size(0)
+
+    for i in range(batch_size):
+        words_output = torch.split(rnn_out[i], last_idxs[i])[0]
+        #print("words out:", words_output.size())
+        clean_batch.append(words_output)
+        
+    vectors = clean_batch # torch.stack(clean_batch)
+    #print("vectors out:", vectors.size())
+    return vectors
+
 
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input
@@ -75,11 +92,12 @@ class TaskAModel(nn.Module):
         self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
         self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
-    def forward(self, x):
+    def forward(self, x, x_lens):
         embeddings = self.word_embedding(x.long())
         embeddings = self.dropout(embeddings)
-        o, (h, c) = self.lstm(embeddings)
-        o = self.dropout(o)
+        rnn_out = self.lstm(embeddings)
+
+        o = self.dropout(rnn_out)
         hidden = self.hidden(o)
         output = self.output(hidden)
         return output
@@ -146,16 +164,16 @@ class ABSALightningModule(pl.LightningModule):
         )
         return
 
-    def forward(self, x):
+    def forward(self, x, x_lens):
         # add output processing
-        logits = self.model(x)
+        logits = self.model(x, x_lens)
         predictions = torch.argmax(logits, -1)
         return logits, predictions
 
     def training_step(self, train_batch, batch_idx):
         x, x_lens, y, _, _ = train_batch
         # We receive one batch of data and perform a forward pass:
-        logits, preds = self.forward(x)
+        logits, preds = self.forward(x, x_lens)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
 
@@ -166,7 +184,7 @@ class ABSALightningModule(pl.LightningModule):
 
     def validation_step(self, val_batch, batch_idx):
         x, x_lens, y, _, _ = val_batch
-        logits, preds = self.forward(x)
+        logits, preds = self.forward(x, x_lens)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
         #print("logits:", logits.size())        

@@ -64,11 +64,10 @@ class ABSADataset(Dataset):
             data_path : str=LAPTOP_TRAIN,
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
-            dev : bool=False,
             vocab=None
         ):
         self.data_path = data_path
-        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, dev=dev, vocab=vocab)
+        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, vocab=vocab)
 
     def _tokenize_line(self, line: str, pattern='\W'):
         """
@@ -140,9 +139,11 @@ class ABSADataset(Dataset):
         else:
             return [tags["O"] for t in tokens]
 
-    def _read_data(self, data_path : str):
+    def _read_data(self, data_path : str, mode: str="tokenize"):
         """
-        Reads the dataset and analyze words and target frequencies. 
+        Reads the dataset and analyze words and targets frequencies.
+        Args:
+        - `mode` : whether to tokenize ("tokenize") or get the raw ("raw") input text.  
         """
         print(f"\n[dataset]: Loading data from '{data_path}'...")
         sentences = []
@@ -153,21 +154,27 @@ class ABSADataset(Dataset):
         with open(data_path, "r") as f:
             json_data = json.load(f)
             for entry in json_data:
+                t_list = []
                 # tokenize data sentences
                 tokens = self._tokenize_line(entry["text"])
-                #print(tokens)
                 words_list.extend(tokens)
-                sentences.append(tokens)
 
                 # count target words
                 targets = entry["targets"]
                 if len(targets) > 0:
                     for tgt in targets:
                         targets_list.append(tgt[1])
+                        t_list.append(tgt[1])
 
                 # tag input tokens
                 tags = self._tag_tokens(targets, tokens)
-                labels.append(tags)
+
+                if mode == "tokenize":
+                    sentences.append(tokens)
+                    labels.append(tags)
+                elif mode == "raw":
+                    sentences.append(entry["text"])
+                    labels.append(t_list)
                 
         assert len(sentences) == len(labels)
         print("sentences:",len(sentences))
@@ -190,7 +197,7 @@ class ABSADataset(Dataset):
             vocab_size: int=3500, 
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
-            dev : bool=False,
+            mode : str="tokenize",
             vocab=None
         ):
         """
@@ -205,8 +212,10 @@ class ABSADataset(Dataset):
             - `unk_token` : token to associate with unknown words;
             - `pad_token` : token to indicate padding;
         """       
-        sentences, labels, targets_list, word_counter = self._read_data(data_path)
+        # read data form file
+        sentences, labels, targets_list, word_counter = self._read_data(data_path, mode=mode)
 
+        # build vocabulary on data if none is given
         if vocab is None:
             print("\n[dataset]: building vocabulary ...")
             # load pretrained GloVe word embeddings
@@ -225,21 +234,28 @@ class ABSADataset(Dataset):
             print("\n[dataset]: (dev) using train vocabulary ...")
             self.vocabulary = vocab
 
-        # create data samples -> (idxs, tags)
+        # create data samples -> (x, y)
         self.samples = []
-        for toks, tags, terms in zip(sentences,labels,targets_list):
-            tokens_idxs = []
-            for t in toks:
-                try:
-                    idx = self.vocabulary.stoi[t]
-                except:
-                    idx = self.vocabulary.stoi[unk_token]
 
-                assert len(toks) == len(tags)
-                tokens_idxs.append(idx)
+        if mode == "tokenize":
+            for toks, tags, terms in zip(sentences,labels,targets_list):
+                tokens_idxs = []
+                for t in toks:
+                    try:
+                        idx = self.vocabulary.stoi[t]
+                    except:
+                        idx = self.vocabulary.stoi[unk_token]
 
-            #print(toks, tags)
-            self.samples.append((tokens_idxs,tags,toks,self._tokenize_line(terms)))
+                    assert len(toks) == len(tags)
+                    tokens_idxs.append(idx)
+
+                #print(toks, tags)
+                self.samples.append((tokens_idxs,tags,toks,self._tokenize_line(terms)))
+
+        elif mode == "raw":
+            # use raw text as input (required by transformers)
+            for s, l in zip(sentences,labels):
+                self.samples.append((s,l))
         
         return
 

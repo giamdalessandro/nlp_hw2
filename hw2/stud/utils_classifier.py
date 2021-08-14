@@ -95,8 +95,7 @@ class TaskAModel(nn.Module):
     def forward(self, x, x_lens):
         embeddings = self.word_embedding(x.long())
         embeddings = self.dropout(embeddings)
-        rnn_out = self.lstm(embeddings)
-
+        rnn_out, (h, c)  = self.lstm(embeddings)        
         o = self.dropout(rnn_out)
         hidden = self.hidden(o)
         output = self.output(hidden)

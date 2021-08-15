@@ -97,8 +97,8 @@ hparams = {
 
 print("\n[INFO]: Building model ...")
 # instanciate task-specific model
-task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
-#task_model = TaskATransformerModel(hparams=hparams)
+#task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
+task_model = TaskATransformerModel(hparams=hparams)
 
 # instanciate pl.LightningModule for training
 model = ABSALightningModule(task_model)

@@ -277,7 +277,7 @@ class ABSADataModule(pl.LightningDataModule):
             train_path: str=LAPTOP_TRAIN, 
             dev_path  : str=LAPTOP_DEV,
             batch_size: int=32,
-            in_mode : str="tokenize",
+            in_mode : str="raw",
             test : bool=False,
             collate_fn=None
         ):
@@ -285,23 +285,23 @@ class ABSADataModule(pl.LightningDataModule):
         self.train_path = train_path
         self.dev_path   = dev_path
         self.batch_size = batch_size
-        self.collate_fn = collate_fn
-        self.mode = mode
+        self.collate_fn = collate_fn if in_mode == "tokenize" else None
+        self.in_mode = in_mode
 
         if not test:
-            self.setup(mode=in_mode)
+            self.setup()
         else:
             self.test_setup()
 
-    def setup(self, mode: str="tokenize"):
+    def setup(self):
         """
         Initialize train and eval datasets from training
         """
         # TODO check if need both dataset together
-        self.train_dataset = ABSADataset(data_path=self.train_path)
+        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode)
         self.vocabulary = self.train_dataset.vocabulary
 
-        self.eval_dataset  = ABSADataset(data_path=self.dev_path, mode=mode, vocab=self.vocabulary)
+        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, vocab=self.vocabulary)
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 

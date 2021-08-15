@@ -3,7 +3,8 @@ import torchmetrics
 from torch import nn
 
 import pytorch_lightning as pl
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
+                        BertTokenizer, BertModel
 
 def print_hparams(hparam: dict):
     print("\n[model]: hyperparameters ...")
@@ -103,14 +104,16 @@ class TaskAModel(nn.Module):
 
 class TaskATransformerModel(nn.Module):
     # we provide the hyperparameters as input
-    def __init__(self, hparams: dict, embeddings = None):
+    def __init__(self, hparams: dict):
         super().__init__()
         print_hparams(hparams)
         self.softmax = nn.Softmax()
         self.dropout = nn.Dropout(hparams["dropout"])
 
-        self.tokenizer = AutoTokenizer.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
-        self.model = AutoModelForSequenceClassification.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            "ykacer/bert-base-cased-imdb-sequence-classification")
+        self.transfModel = AutoModelForSequenceClassification.from_pretrained(
+            "ykacer/bert-base-cased-imdb-sequence-classification")
 
         # Recurrent layer
         self.lstm = nn.LSTM(
@@ -127,13 +130,13 @@ class TaskATransformerModel(nn.Module):
         self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
         self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
-    def forward(self, x):
+    def forward(self, x, x_lens):
         # x -> (raw_sentence,raw_targets)
-        tokens = self.tokenizer(x)
-        embeddings = self.model(tokens)
+        tokens = self.tokenizer(x, return_tensors='pt', padding=True)
+        transf_out = self.transfModel(**tokens)
+        transf_out = self.dropout(transf_out.last_hidden_state)
 
-        embeddings = self.dropout(embeddings)
-        o, (h, c) = self.lstm(embeddings)
+        o, (h, c) = self.lstm(transf_out)
         o = self.dropout(o)
         hidden = self.hidden(o)
         output = self.output(hidden)

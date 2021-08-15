@@ -128,7 +128,8 @@ class TaskATransformerModel(nn.Module):
         self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
     def forward(self, x):
-        tokens = self.tokenizer(x.long())
+        # x -> (raw_sentence,raw_targets)
+        tokens = self.tokenizer(x)
         embeddings = self.model(tokens)
 
         embeddings = self.dropout(embeddings)

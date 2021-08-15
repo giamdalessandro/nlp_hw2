@@ -64,10 +64,11 @@ class ABSADataset(Dataset):
             data_path : str=LAPTOP_TRAIN,
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
+            mode : str="tokenize",
             vocab=None
         ):
         self.data_path = data_path
-        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, vocab=vocab)
+        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, mode=mode, vocab=vocab)
 
     def _tokenize_line(self, line: str, pattern='\W'):
         """
@@ -276,7 +277,7 @@ class ABSADataModule(pl.LightningDataModule):
             train_path: str=LAPTOP_TRAIN, 
             dev_path  : str=LAPTOP_DEV,
             batch_size: int=32,
-            mode : str="single",
+            in_mode : str="tokenize",
             test : bool=False,
             collate_fn=None
         ):
@@ -288,11 +289,11 @@ class ABSADataModule(pl.LightningDataModule):
         self.mode = mode
 
         if not test:
-            self.setup()
+            self.setup(mode=in_mode)
         else:
             self.test_setup()
 
-    def setup(self):
+    def setup(self, mode: str="tokenize"):
         """
         Initialize train and eval datasets from training
         """
@@ -300,7 +301,7 @@ class ABSADataModule(pl.LightningDataModule):
         self.train_dataset = ABSADataset(data_path=self.train_path)
         self.vocabulary = self.train_dataset.vocabulary
 
-        self.eval_dataset  = ABSADataset(data_path=self.dev_path, vocab=self.vocabulary)
+        self.eval_dataset  = ABSADataset(data_path=self.dev_path, mode=mode, vocab=self.vocabulary)
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 

@@ -285,7 +285,7 @@ class ABSADataModule(pl.LightningDataModule):
         self.train_path = train_path
         self.dev_path   = dev_path
         self.batch_size = batch_size
-        self.collate_fn = collate_fn if in_mode == "tokenize" else None
+        self.collate_fn = collate_fn
         self.in_mode = in_mode
 
         if not test:

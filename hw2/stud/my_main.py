@@ -9,7 +9,7 @@ pl.seed_everything(42, workers=True)
 from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
 from utils_classifier import TaskAModel, TaskATransformerModel, ABSALightningModule, \
-                        rnn_collate_fn, get_preds_terms
+                        rnn_collate_fn,  raw_collate_fn, get_preds_terms
 
 TRAIN      = False
 NUM_EPOCHS = 20
@@ -17,7 +17,7 @@ BATCH_SIZE = 32
 # testing config name
 SAVE_NAME = "transf_allRnn_res2lap_2FF64_BIO"
 
-def compute_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
+def precisions_scores(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
     model.freeze()
     all_predictions = []
     all_labels = []
@@ -44,6 +44,19 @@ def compute_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_vo
     return {"micro_precision":micro_precision,
             "macro_precision":macro_precision, 
             "per_class_precision":per_class_precision}
+
+def evaluate_precision(precisions: dict, label_d: dict=IDX2LABEL):
+    per_class_precision = precisions["per_class_precision"]
+    print(f"Micro Precision: {precisions['micro_precision']}")
+    print(f"Macro Precision: {precisions['macro_precision']}")
+
+    print("Per class Precision:")
+    print("\tlabel\tscore")
+    for idx_class, precision in sorted(enumerate(per_class_precision), key=lambda elem: -elem[1]):
+        label = label_d[idx_class]
+        print(f"\t{label}\t{precision:.4f}")
+
+    return
 
 def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
     model.freeze()
@@ -77,7 +90,7 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=rnn_collate_fn)
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=raw_collate_fn)
 train_vocab = data_module.vocabulary
 # instanciate dataloaders
 train_dataloader = data_module.train_dataloader()
@@ -100,7 +113,7 @@ print("\n[INFO]: Building model ...")
 #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
 task_model = TaskATransformerModel(hparams=hparams)
 
-# instanciate pl.LightningModule for training
+# instanciate pl.LightningModule for training with task model
 model = ABSALightningModule(task_model)
 
 
@@ -136,15 +149,8 @@ trainer.fit(model, train_dataloader, eval_dataloader)
 
 #### compute performances
 print("\n[INFO]: precison metrics ...")
-precisions = compute_metrics(model, eval_dataloader, BIO_TAGS)
-per_class_precision = precisions["per_class_precision"]
-print(f"Micro Precision: {precisions['micro_precision']}")
-print(f"Macro Precision: {precisions['macro_precision']}")
-print("Per class Precision:")
-print("\tlabel\tscore")
-for idx_class, precision in sorted(enumerate(per_class_precision), key=lambda elem: -elem[1]):
-    label = IDX2LABEL[idx_class]
-    print(f"\t{label}\t{precision:.4f}")
+precisions = precisions_scores(model, eval_dataloader, BIO_TAGS)
+evaluate_precision(precisions=precisions)
 
 print("\n[INFO]: evaluate extraction  ...")
 evaluate_extraction(model, eval_dataloader)

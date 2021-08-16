@@ -34,6 +34,19 @@ def rnn_collate_fn(data_elements: list):
     y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
     return X, x_lens, y, tokens, terms
 
+def raw_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
+    """
+    X = []
+    y = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(elem[1])
+
+    return X, y
+
 def get_preds_terms(preds, tokens):
     """
     Extract predicted aspect terms from predicted tags sequence (batch-wise).
@@ -110,10 +123,8 @@ class TaskATransformerModel(nn.Module):
         self.softmax = nn.Softmax()
         self.dropout = nn.Dropout(hparams["dropout"])
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            "ykacer/bert-base-cased-imdb-sequence-classification")
-        self.transfModel = AutoModelForSequenceClassification.from_pretrained(
-            "ykacer/bert-base-cased-imdb-sequence-classification")
+        self.tokenizer = BertTokenizer.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
+        self.transfModel = BertModel.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
 
         # Recurrent layer
         self.lstm = nn.LSTM(
@@ -130,14 +141,14 @@ class TaskATransformerModel(nn.Module):
         self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
         self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
-    def forward(self, x, x_lens):
+    def forward(self, x):
         # x -> (raw_sentence,raw_targets)
-        tokens = self.tokenizer(x, return_tensors='pt', padding=True)
+        tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
         transf_out = self.transfModel(**tokens)
-        transf_out = self.dropout(transf_out.last_hidden_state)
-
-        o, (h, c) = self.lstm(transf_out)
+        #transf_out = self.dropout(transf_out.last_hidden_state)
+        o, (h, c) = self.lstm(transf_out.last_hidden_state)
         o = self.dropout(o)
+
         hidden = self.hidden(o)
         output = self.output(hidden)
         return output
@@ -167,16 +178,17 @@ class ABSALightningModule(pl.LightningModule):
         )
         return
 
-    def forward(self, x, x_lens):
+    def forward(self, x):
         # add output processing
-        logits = self.model(x, x_lens)
+        logits = self.model(x)
         predictions = torch.argmax(logits, -1)
         return logits, predictions
 
     def training_step(self, train_batch, batch_idx):
-        x, x_lens, y, _, _ = train_batch
+        #x, x_lens, y, _, _ = train_batch
+        x, y = train_batch
         # We receive one batch of data and perform a forward pass:
-        logits, preds = self.forward(x, x_lens)
+        logits, preds = self.forward(x)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
 
@@ -186,14 +198,15 @@ class ABSALightningModule(pl.LightningModule):
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        x, x_lens, y, _, _ = val_batch
-        logits, preds = self.forward(x, x_lens)
+        #x, x_lens, y, _, _ = val_batch
+        x, y = val_batch
+        logits, preds = self.forward(x)
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
         #print("logits:", logits.size())        
         #print("labels:", labels.size())        
 
-        # Compute F1 score
+        # Compute F1 scores
         micro_f1 = self.micro_f1(preds, y.int())
         self.log('micro_f1', micro_f1, prog_bar=True)
 

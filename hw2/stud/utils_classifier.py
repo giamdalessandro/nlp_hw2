@@ -3,8 +3,8 @@ import torchmetrics
 from torch import nn
 
 import pytorch_lightning as pl
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
-                        BertTokenizer, BertModel
+from transformers import BertForTokenClassification, BertTokenizer, BertModel
+
 
 def print_hparams(hparam: dict):
     print("\n[model]: hyperparameters ...")
@@ -125,6 +125,8 @@ class TaskATransformerModel(nn.Module):
 
         self.tokenizer = BertTokenizer.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
         self.transfModel = BertModel.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
+        #self.transfModel = BertForTokenClassification.from_pretrained(
+        #    ykacer/bert-base-cased-imdb-sequence-classification")
 
         # Recurrent layer
         self.lstm = nn.LSTM(
@@ -141,9 +143,17 @@ class TaskATransformerModel(nn.Module):
         self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
         self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
-    def forward(self, x):
+    def forward(self, x, y, test: bool=False):
         # x -> (raw_sentence,raw_targets)
+        y_toks = []
+        for i in range(len(y)):
+            y_toks.extend([self.tokenizer.tokenize(t) for t in y[i]]) 
+
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
+        for k, v in tokens.items():
+            if not test:   
+                tokens[k] = v.cuda()
+
         transf_out = self.transfModel(**tokens)
         #transf_out = self.dropout(transf_out.last_hidden_state)
         o, (h, c) = self.lstm(transf_out.last_hidden_state)

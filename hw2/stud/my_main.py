@@ -98,12 +98,12 @@ eval_dataloader  = data_module.eval_dataloader()
 
 #### set model hyper parameters
 hparams = {
-	"embedding_dim" : 100,                 # embedding dimension
-	"vocab_size"    : len(train_vocab),    # vocab length
-	"lstm_dim"      : 128,                 # LSTM hidden layer dim
-    "hidden_dim"    : 64,                 # hidden linear layer dim
-	"output_dim"    : len(BIO_TAGS),       # num of BILOU tags to predict
- 	"bidirectional" : True,                # if biLSTM or LSTM
+	"embedding_dim" : 768,               # embedding dimension, 100 GloVe, 768 BertModel
+	"vocab_size"    : len(train_vocab),  # vocab length
+	"lstm_dim"      : 128,               # LSTM hidden layer dim
+    "hidden_dim"    : 64,                # hidden linear layer dim
+	"output_dim"    : len(BIO_TAGS),     # num of BILOU tags to predict
+ 	"bidirectional" : True,              # if biLSTM or LSTM
 	"rnn_layers"    : 1,
 	"dropout"       : 0.3
 }

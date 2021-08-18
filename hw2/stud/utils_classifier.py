@@ -155,9 +155,9 @@ class TaskATransformerModel(nn.Module):
     def forward(self, x, test: bool=False):
         # x -> (raw_sentence,tokenized_targets)
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        for k, v in tokens.items():
-            if not test:   
-                tokens[k] = v.cuda()
+        #for k, v in tokens.items():
+        #    if not test:   
+        #        tokens[k] = v.cuda()
 
         transf_out = self.transfModel(**tokens)
         #transf_out = self.dropout(transf_out.last_hidden_state)
@@ -216,12 +216,10 @@ class ABSALightningModule(pl.LightningModule):
         #x, x_lens, y, _, _ = val_batch
         x, y = val_batch
         logits, preds = self.forward(x)
-        print("predictions:\t", preds.size())
-        print("labels:\t", y.size())
+        #print("predictions:\t", preds.size())
+        #print("labels:\t", y.size())
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
-        #print("logits:", logits.size())        
-        #print("labels:", labels.size())        
 
         # Compute F1 scores
         micro_f1 = self.micro_f1(preds, y.int())

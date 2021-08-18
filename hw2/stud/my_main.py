@@ -1,4 +1,7 @@
 import torch
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
@@ -13,7 +16,7 @@ from utils_classifier import TaskAModel, TaskATransformerModel, ABSALightningMod
 
 TRAIN      = False
 NUM_EPOCHS = 20
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 
 # test config name
 SAVE_NAME = "transf_allRnn_res2lap_2FF64_BIO"
@@ -138,7 +141,7 @@ logger = pl.loggers.TensorBoardLogger(save_dir='logs/', name=SAVE_NAME)
 
 # training loop
 trainer = pl.Trainer(
-    gpus=1,
+    gpus=0,
     max_epochs=NUM_EPOCHS,
     logger=logger,
     callbacks=[ckpt_clbk,early_clbk],

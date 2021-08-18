@@ -161,10 +161,7 @@ class ABSADataset(Dataset):
         tokenizer = None
         if bert:
             tokenizer = BertTokenizer.from_pretrained(
-                "ykacer/bert-base-cased-imdb-sequence-classification",
-                cls_token="[CLS]", 
-                sep_token="[SEP]"
-            )
+                "ykacer/bert-base-cased-imdb-sequence-classification")
 
         with open(data_path, "r") as f:
             json_data = json.load(f)
@@ -173,6 +170,8 @@ class ABSADataset(Dataset):
                 # tokenize data sentences
                 if bert:
                     tokens = tokenizer.tokenize(entry["text"])
+                    tokens.insert(0, "[CLS]")
+                    tokens.append("[SEP]")
                 else:
                     tokens = self._tokenize_line(entry["text"])
                 words_list.extend(tokens)

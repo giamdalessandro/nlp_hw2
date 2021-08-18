@@ -12,41 +12,6 @@ def print_hparams(hparam: dict):
         print(f"{k}:\t{v}")
     print()
 
-def rnn_collate_fn(data_elements: list):
-    """
-    Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y, token, terms) tuples)
-    """
-    X = []
-    x_lens = []
-    y = []
-    tokens = []
-    terms = []
-    for elem in data_elements:
-        X.append(torch.Tensor(elem[0]))
-        x_lens.append(len(elem[0]))
-        y.append(torch.Tensor(elem[1]))
-        tokens.append(elem[2])
-        terms.append(elem[3])
-
-    X = torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
-    x_lens = torch.Tensor(x_lens)
-    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, x_lens, y, tokens, terms
-
-def raw_collate_fn(data_elements: list):
-    """
-    Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
-    """
-    X = []
-    y = []
-    for elem in data_elements:
-        X.append(elem[0])
-        y.append(elem[1])
-
-    return X, y
-
 def get_preds_terms(preds, tokens):
     """
     Extract predicted aspect terms from predicted tags sequence (batch-wise).
@@ -78,6 +43,52 @@ def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
     vectors = clean_batch # torch.stack(clean_batch)
     #print("vectors out:", vectors.size())
     return vectors
+
+def get_label_tokens(targets: dict, tokenizer):
+    """
+    Commento sbagliato come un negroni ma senza negroni.
+    """
+    for tgt in targets:
+        if len(tgt[1]) > 0:
+            tokenizer.tokenize(tgt[1])
+
+    return
+
+def rnn_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y, token, terms) tuples)
+    """
+    X = []
+    x_lens = []
+    y = []
+    tokens = []
+    terms = []
+    for elem in data_elements:
+        X.append(torch.Tensor(elem[0]))
+        x_lens.append(len(elem[0]))
+        y.append(torch.Tensor(elem[1]))
+        tokens.append(elem[2])
+        terms.append(elem[3])
+
+    X = torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
+    x_lens = torch.Tensor(x_lens)
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, x_lens, y, tokens, terms
+
+def raw_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
+    """
+    X = []
+    y = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(torch.Tensor(elem[1]))
+
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, y
 
 
 class TaskAModel(nn.Module):
@@ -125,8 +136,6 @@ class TaskATransformerModel(nn.Module):
 
         self.tokenizer = BertTokenizer.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
         self.transfModel = BertModel.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
-        #self.transfModel = BertForTokenClassification.from_pretrained(
-        #    ykacer/bert-base-cased-imdb-sequence-classification")
 
         # Recurrent layer
         self.lstm = nn.LSTM(
@@ -143,12 +152,8 @@ class TaskATransformerModel(nn.Module):
         self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
         self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
-    def forward(self, x, y, test: bool=False):
-        # x -> (raw_sentence,raw_targets)
-        y_toks = []
-        for i in range(len(y)):
-            y_toks.extend([self.tokenizer.tokenize(t) for t in y[i]]) 
-
+    def forward(self, x, test: bool=False):
+        # x -> (raw_sentence,tokenized_targets)
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
         for k, v in tokens.items():
             if not test:   
@@ -211,6 +216,8 @@ class ABSALightningModule(pl.LightningModule):
         #x, x_lens, y, _, _ = val_batch
         x, y = val_batch
         logits, preds = self.forward(x)
+        print("predictions:\t", preds.size())
+        print("labels:\t", y.size())
         logits = logits.view(-1, logits.shape[-1])
         labels = y.view(-1).long()
         #print("logits:", logits.size())        
@@ -223,7 +230,7 @@ class ABSALightningModule(pl.LightningModule):
         macro_f1 = self.macro_f1(preds, y.int())
         self.log('macro_f1', macro_f1, prog_bar=True)
 
-        # Compute validation loss 
+        # Compute validation loss
         sample_loss = self.loss_function(logits, labels)
         self.log('valid_loss', sample_loss, prog_bar=True, on_epoch=True)
         return

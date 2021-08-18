@@ -11,7 +11,7 @@ import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
 from torchtext import vocab
 from torchtext.vocab import Vocab
-
+from transformers import BertTokenizer
 
 LAPTOP_TRAIN     = "data/laptops_train.json"
 LAPTOP_DEV       = "data/laptops_dev.json"
@@ -80,18 +80,25 @@ class ABSADataset(Dataset):
         line = re.sub("[.,;:]", " ", line)
         return re.split(pattern, line.lower())
 
-    def _tag_tokens(self, targets: list, tokens: list, tags: dict=BIO_TAGS, verbose: bool=False):
+    def _tag_tokens(self, targets: list, tokens: list, tags: dict=BIO_TAGS, bert_tokenizer=None, verbose: bool=False):
         """
         Matches each token of the input text to the corresponding BILOU tag, 
         and returns the tags vector/list.
         """
+        if bert_tokenizer is not None:
+            tokenizer = bert_tokenizer
+
         if len(targets) > 0:
             tags_list = []
             for tgt in targets:
                 t_list = []
                 inside = False
                 found  = False
-                tgt_terms = self._tokenize_line(tgt[1]) 
+                if bert_tokenizer is not None:
+                    tgt_terms = tokenizer.tokenize(tgt[1], add_special_tokens=True) 
+                else:
+                    tgt_terms = self._tokenize_line(tgt[1])
+
                 if verbose:
                     print(tgt_terms)
 
@@ -140,43 +147,55 @@ class ABSADataset(Dataset):
         else:
             return [tags["O"] for t in tokens]
 
-    def _read_data(self, data_path : str, mode: str="tokenize"):
+    def _read_data(self, data_path : str, mode: str="tokenize", bert: bool=False):
         """
         Reads the dataset and analyze words and targets frequencies.
         Args:
-        - `mode` : whether to tokenize ("tokenize") or get the raw ("raw") input text.  
+        - `mode` : whether to tokenize ("tokenize") or get the raw ("raw") input text.
         """
         print(f"\n[dataset]: Loading data from '{data_path}'...")
         sentences = []
         labels    = []
         words_list   = []
         targets_list = []
+        tokenizer = None
+        if bert:
+            tokenizer = BertTokenizer.from_pretrained(
+                "ykacer/bert-base-cased-imdb-sequence-classification",
+                cls_token="[CLS]", 
+                sep_token="[SEP]"
+            )
 
         with open(data_path, "r") as f:
             json_data = json.load(f)
             for entry in json_data:
                 t_list = []
                 # tokenize data sentences
-                tokens = self._tokenize_line(entry["text"])
+                if bert:
+                    tokens = tokenizer.tokenize(entry["text"])
+                else:
+                    tokens = self._tokenize_line(entry["text"])
                 words_list.extend(tokens)
 
                 # count target words
                 targets = entry["targets"]
                 if len(targets) > 0:
+                    t_list.append(targets)
                     for tgt in targets:
                         targets_list.append(tgt[1])
-                        t_list.append(tgt[1])
+                else:
+                    t_list.append([])
 
                 # tag input tokens
-                tags = self._tag_tokens(targets, tokens)
-
+                tags = self._tag_tokens(targets, tokens, bert_tokenizer=tokenizer)
+                labels.append(tags)
+                
                 if mode == "tokenize":
                     sentences.append(tokens)
-                    labels.append(tags)
                 elif mode == "raw":
                     sentences.append(entry["text"])
-                    labels.append(t_list)
                 
+
         assert len(sentences) == len(labels)
         print("sentences:",len(sentences))
         print("labels:",len(labels))
@@ -214,7 +233,7 @@ class ABSADataset(Dataset):
             - `pad_token` : token to indicate padding;
         """       
         # read data form file
-        sentences, labels, targets_list, word_counter = self._read_data(data_path, mode=mode)
+        sentences, labels, targets_list, word_counter = self._read_data(data_path, mode=mode, bert=True)
 
         # build vocabulary on data if none is given
         if vocab is None:
@@ -222,10 +241,10 @@ class ABSADataset(Dataset):
             # load pretrained GloVe word embeddings
             glove_vec = torchtext.vocab.GloVe(name="6B", dim=100, unk_init=torch.FloatTensor.normal_)
             self.vocabulary = Vocab(
-                counter=word_counter,                # (word,freq) mapping
-                max_size=vocab_size,                 # vocabulary max size
-                specials=[pad_token,unk_token],      # special tokens
-                vectors=glove_vec                    # pre-trained embeddings
+                counter=word_counter,             # (word,freq) mapping
+                max_size=vocab_size,              # vocabulary max size
+                specials=[pad_token,unk_token],   # special tokens
+                vectors=glove_vec                 # pre-trained embeddings
             )
             # ensure pad_token embedding is a zeros tensor
             self.vocabulary.vectors[0] = torch.zeros([glove_vec.dim]).float()
@@ -298,7 +317,7 @@ class ABSADataModule(pl.LightningDataModule):
         Initialize train and eval datasets from training
         """
         # TODO check if need both dataset together
-        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode)
+        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode, vocab="bert")
         self.vocabulary = self.train_dataset.vocabulary
 
         self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, vocab=self.vocabulary)

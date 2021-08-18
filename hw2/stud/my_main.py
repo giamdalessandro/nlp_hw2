@@ -14,7 +14,8 @@ from utils_classifier import TaskAModel, TaskATransformerModel, ABSALightningMod
 TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
-# testing config name
+
+# test config name
 SAVE_NAME = "transf_allRnn_res2lap_2FF64_BIO"
 
 def precisions_scores(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
@@ -98,7 +99,7 @@ eval_dataloader  = data_module.eval_dataloader()
 
 #### set model hyper parameters
 hparams = {
-	"embedding_dim" : 768,               # embedding dimension, 100 GloVe, 768 BertModel
+	"embedding_dim" : 768,               # embedding dimension -> (100 GloVe | 768 BertModel)
 	"vocab_size"    : len(train_vocab),  # vocab length
 	"lstm_dim"      : 128,               # LSTM hidden layer dim
     "hidden_dim"    : 64,                # hidden linear layer dim

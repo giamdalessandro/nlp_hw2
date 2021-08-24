@@ -3,7 +3,8 @@ import torchmetrics
 from torch import nn
 
 import pytorch_lightning as pl
-from transformers import BertForTokenClassification, BertTokenizer, BertModel
+from transformers import BertForTokenClassification, BertTokenizer, BertModel, \
+                        DistilBertForTokenClassification, DistilBertTokenizer
 
 
 def print_hparams(hparam: dict):
@@ -134,10 +135,16 @@ class TaskATransformerModel(nn.Module):
         self.softmax = nn.Softmax()
         self.dropout = nn.Dropout(hparams["dropout"])
 
-        self.tokenizer = BertTokenizer.from_pretrained("bert-base-cased")#"ykacer/bert-base-cased-imdb-sequence-classification")
-        self.transfModel = BertForTokenClassification.from_pretrained(
-            "bert-base-cased",
-            num_labels=5)
+        #self.tokenizer = BertTokenizer.from_pretrained(
+        #    "ykacer/bert-base-cased-imdb-sequence-classification")
+        #self.transfModel = BertForTokenClassification.from_pretrained(
+        #    "bert-base-cased",
+        #    num_labels=hparams["output_dim"])
+        self.tokenizer = DistilBertTokenizer.from_pretrained(
+            "distilbert-base-cased")
+        self.transfModel = DistilBertForTokenClassification.from_pretrained(
+            "distilbert-base-cased",
+            num_labels=hparams["output_dim"])
 
         # custom classifier head
         classifier_head = nn.Sequential(
@@ -147,14 +154,15 @@ class TaskATransformerModel(nn.Module):
         self.transfModel.classifier = classifier_head
 
     
-    def forward(self, x, test: bool=False):
+    def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        for k, v in tokens.items():
-            if not test:   
-                tokens[k] = v.cuda()
+        #for k, v in tokens.items():
+        #    if not test:   
+        #        tokens[k] = v.cuda()
 
-        output = self.transfModel(**tokens)
+        y = y.long() if y is not None else None
+        output = self.transfModel(**tokens, labels=y)
         return output
 
 """
@@ -210,6 +218,7 @@ class ABSALightningModule(pl.LightningModule):
     """
     def __init__(self, model: nn.Module=None):
         super().__init__()
+        self.dummy_flag = True
         self.model = model
 
         # task A metrics
@@ -228,35 +237,37 @@ class ABSALightningModule(pl.LightningModule):
         )
         return
 
-    def forward(self, x):
+    def forward(self, x, y):
         """ Perform model forward pass. """
-        output = self.model(x)
+        output = self.model(x, y)
         return output
 
     def training_step(self, train_batch, batch_idx):
         # Base -> x, x_lens, y, _, _ = train_batch
         # Bert -> x, y = train_batch 
         x, y = train_batch
-        output = self.forward(x)
+        output = self.forward(x, y)
         logits = output.logits    
     
         # Compute the loss:
         #loss = self.loss_function(logits, labels)
         loss = output.loss
-        output.loss.backward()
+        if self.dummy_flag:
+            output.loss.backward(retain_graph=True)
+        else:
+            output.loss.backward()
+            self.dummy_flag = False
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)  
+
         return loss
 
     def validation_step(self, val_batch, batch_idx):
         # Base -> x, x_lens, y, _, _ = train_batch
         # Bert -> x, y = train_batch
         x, y = val_batch
-        output = self.forward(x)
-        logits = output.logits 
-        #print("predictions:\t", preds.size())
-        #print("labels:\t", y.size())
+        output = self.forward(x, y)
+        logits = output.logits
         preds = torch.argmax(logits, -1)
-        labels = y.view(-1).long()
 
         # Compute F1 scores
         micro_f1 = self.micro_f1(preds, y.int())
@@ -266,12 +277,16 @@ class ABSALightningModule(pl.LightningModule):
         self.log('macro_f1', macro_f1, prog_bar=True)
 
         # Compute validation loss
+        # labels = y.view(-1).long()
         # sample_loss = self.loss_function(logits, labels)
-        #val_loss = output.loss
-        #self.log('valid_loss', val_loss, prog_bar=True, on_epoch=True)
+        val_loss = output.loss
+        self.log('valid_loss', val_loss, prog_bar=True, on_epoch=True)
         return
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
+
+    def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
+        return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 

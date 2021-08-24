@@ -11,7 +11,7 @@ import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
 from torchtext import vocab
 from torchtext.vocab import Vocab
-from transformers import BertTokenizer
+from transformers import BertTokenizer, DistilBertTokenizer
 
 LAPTOP_TRAIN     = "data/laptops_train.json"
 LAPTOP_DEV       = "data/laptops_dev.json"
@@ -160,8 +160,10 @@ class ABSADataset(Dataset):
         targets_list = []
         tokenizer = None
         if bert:
-            tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-                #"ykacer/bert-base-cased-imdb-sequence-classification")
+            #tokenizer = BertTokenizer.from_pretrained(
+            #    "ykacer/bert-base-cased-imdb-sequence-classification")
+            tokenizer = DistilBertTokenizer.from_pretrained(
+                "distilbert-base-cased")
 
         with open(data_path, "r") as f:
             json_data = json.load(f)

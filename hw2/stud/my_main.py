@@ -14,19 +14,19 @@ from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
 from utils_classifier import TaskAModel, TaskATransformerModel, ABSALightningModule, \
                         rnn_collate_fn,  raw_collate_fn, get_preds_terms
 
-TRAIN      = False
+TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 16
+SAVE_NAME  = "transf_2FFh_res2lap_BIO" # test config name
 
-# test config name
-SAVE_NAME = "transf_allRnn_res2lap_2FF64_BIO"
 
 def precisions_scores(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
     model.freeze()
     all_predictions = []
     all_labels = []
     for indexed_elem in l_dataset:
-        indexed_in, _, indexed_labels, _, _ = indexed_elem
+        #indexed_in, _, indexed_labels, _, _ = indexed_elem
+        indexed_in, indexed_labels = indexed_elem
         predictions, _ = model(indexed_in)
         predictions = torch.argmax(predictions, -1).view(-1)
         labels = indexed_labels.view(-1)
@@ -100,16 +100,19 @@ train_vocab = data_module.vocabulary
 train_dataloader = data_module.train_dataloader()
 eval_dataloader  = data_module.eval_dataloader()
 
+print("\n[INFO]: Building model...")
+# instanciate pl.LightningModule for training with task model
+
 #### set model hyper parameters
 hparams = {
-	"embedding_dim" : 768,               # embedding dimension -> (100 GloVe | 768 BertModel)
-	"vocab_size"    : len(train_vocab),  # vocab length
-	"lstm_dim"      : 128,               # LSTM hidden layer dim
+    "embedding_dim" : 768,               # embedding dimension -> (100 GloVe | 768 BertModel)
+    "vocab_size"    : len(train_vocab),  # vocab length
+    "lstm_dim"      : 128,               # LSTM hidden layer dim
     "hidden_dim"    : 64,                # hidden linear layer dim
-	"output_dim"    : len(BIO_TAGS),     # num of BILOU tags to predict
- 	"bidirectional" : True,              # if biLSTM or LSTM
-	"rnn_layers"    : 1,
-	"dropout"       : 0.3
+    "output_dim"    : len(BIO_TAGS),     # num of BILOU tags to predict
+    "bidirectional" : True,              # if biLSTM or LSTM
+    "rnn_layers"    : 1,
+    "dropout"       : 0.3
 }
 
 print("\n[INFO]: Building model ...")
@@ -117,37 +120,45 @@ print("\n[INFO]: Building model ...")
 #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
 task_model = TaskATransformerModel(hparams=hparams)
 
-# instanciate pl.LightningModule for training with task model
-model = ABSALightningModule(task_model)
 
+if TRAIN:
+    #### Trainer
+    model = ABSALightningModule(task_model)
 
-#### Trainer
-# checkpoint and early stopping callback for pl.Trainer()
-ckpt_clbk = ModelCheckpoint(
-    monitor="macro_f1",
-    mode="max",
-    dirpath="./model/pl_checkpoints/",
-    save_last=True,
-    save_top_k=2
-)
-early_clbk = EarlyStopping(
-    monitor="macro_f1",
-    patience=5,
-    verbose=True,
-    mode="max",
-    check_on_train_epoch_end=True
-)
-logger = pl.loggers.TensorBoardLogger(save_dir='logs/', name=SAVE_NAME)
+    # checkpoint and early stopping callback for pl.Trainer()
+    ckpt_clbk = ModelCheckpoint(
+        monitor="macro_f1",
+        mode="max",
+        dirpath="./model/pl_checkpoints/",
+        save_last=True,
+        save_top_k=2
+    )
+    early_clbk = EarlyStopping(
+        monitor="macro_f1",
+        patience=5,
+        verbose=True,
+        mode="max",
+        check_on_train_epoch_end=True
+    )
+    logger = pl.loggers.TensorBoardLogger(save_dir='logs/', name=SAVE_NAME)
 
-# training loop
-trainer = pl.Trainer(
-    gpus=0,
-    max_epochs=NUM_EPOCHS,
-    logger=logger,
-    callbacks=[ckpt_clbk,early_clbk],
-    progress_bar_refresh_rate=20
-)
-trainer.fit(model, train_dataloader, eval_dataloader)
+    # training loop
+    trainer = pl.Trainer(
+        gpus=1,
+        max_epochs=NUM_EPOCHS,
+        logger=logger,
+        callbacks=[ckpt_clbk,early_clbk],
+        progress_bar_refresh_rate=20
+    )
+
+    # execute training loop
+    trainer.fit(model, train_dataloader, eval_dataloader)
+
+else:
+    print(f"\n[INFO]: Loading saved model '{SAVE_NAME}.ckpt' ...")
+    model = ABSALightningModule().load_from_checkpoint(
+        checkpoint_path="model/to_save/transf_allRnn_res2lap_2FF64_BIO.ckpt", 
+        model=task_model)
 
 
 

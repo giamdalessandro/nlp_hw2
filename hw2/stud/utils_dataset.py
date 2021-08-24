@@ -160,8 +160,8 @@ class ABSADataset(Dataset):
         targets_list = []
         tokenizer = None
         if bert:
-            tokenizer = BertTokenizer.from_pretrained(
-                "ykacer/bert-base-cased-imdb-sequence-classification")
+            tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+                #"ykacer/bert-base-cased-imdb-sequence-classification")
 
         with open(data_path, "r") as f:
             json_data = json.load(f)

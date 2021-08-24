@@ -134,46 +134,81 @@ class TaskATransformerModel(nn.Module):
         self.softmax = nn.Softmax()
         self.dropout = nn.Dropout(hparams["dropout"])
 
+        self.tokenizer = BertTokenizer.from_pretrained("bert-base-cased")#"ykacer/bert-base-cased-imdb-sequence-classification")
+        self.transfModel = BertForTokenClassification.from_pretrained(
+            "bert-base-cased",
+            num_labels=5)
+
+        # custom classifier head
+        classifier_head = nn.Sequential(
+            nn.Linear(hparams["embedding_dim"], hparams["hidden_dim"]),
+            nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
+        )
+        self.transfModel.classifier = classifier_head
+
+    
+    def forward(self, x, test: bool=False):
+        # x -> raw_input
+        tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
+        for k, v in tokens.items():
+            if not test:   
+                tokens[k] = v.cuda()
+
+        output = self.transfModel(**tokens)
+        return output
+
+"""
+class TaskATransformerModel(nn.Module):
+    # we provide the hyperparameters as input
+    def __init__(self, hparams: dict):
+        super().__init__()
+        print_hparams(hparams)
+        self.softmax = nn.Softmax()
+        self.dropout = nn.Dropout(hparams["dropout"])
+
         self.tokenizer = BertTokenizer.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
-        self.transfModel = BertModel.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
+        self.transfModel = BertForTokenClassification.from_pretrained(
+            "bert-base-cased", 
+            num_labels=5)
 
         # Recurrent layer
-        self.lstm = nn.LSTM(
-            input_size=hparams["embedding_dim"], 
-            hidden_size=hparams["lstm_dim"], 
-            bidirectional=hparams["bidirectional"],
-            num_layers=hparams["rnn_layers"], 
-            dropout=hparams["dropout"] if hparams["rnn_layers"] > 1 else 0,
-            batch_first=True
-        )
+        #self.lstm = nn.LSTM(
+        #    input_size=hparams["embedding_dim"], 
+        #    hidden_size=hparams["lstm_dim"], 
+        #    bidirectional=hparams["bidirectional"],
+        #    num_layers=hparams["rnn_layers"], 
+        #    dropout=hparams["dropout"] if hparams["rnn_layers"] > 1 else 0,
+        #    batch_first=True
+        #)
 
         # classifier head
-        lstm_output_dim = hparams["lstm_dim"] if hparams["bidirectional"] is False else hparams["lstm_dim"]*2
-        self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
-        self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
+        #lstm_output_dim = hparams["lstm_dim"] if hparams["bidirectional"] is False else hparams["lstm_dim"]*2
+        #self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
+        #self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
     
     def forward(self, x, test: bool=False):
         # x -> (raw_sentence,tokenized_targets)
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        #for k, v in tokens.items():
-        #    if not test:   
-        #        tokens[k] = v.cuda()
+        for k, v in tokens.items():
+            if not test:   
+                tokens[k] = v.cuda()
 
         transf_out = self.transfModel(**tokens)
         #transf_out = self.dropout(transf_out.last_hidden_state)
-        o, (h, c) = self.lstm(transf_out.last_hidden_state)
-        o = self.dropout(o)
+        #o, (h, c) = self.lstm(transf_out.last_hidden_state)
+        #o = self.dropout(o)
 
-        hidden = self.hidden(o)
-        output = self.output(hidden)
-        return output
+        #hidden = self.hidden(o)
+        #output = self.output(hidden)
+        return transf_out #output
+"""
 
 
 class ABSALightningModule(pl.LightningModule):
     """
     LightningModule to easly handle training and evaluation loops with a given nn.Module.
     """
-    def __init__(self, model: nn.Module):
+    def __init__(self, model: nn.Module=None):
         super().__init__()
         self.model = model
 
@@ -194,31 +229,33 @@ class ABSALightningModule(pl.LightningModule):
         return
 
     def forward(self, x):
-        # add output processing
-        logits = self.model(x)
-        predictions = torch.argmax(logits, -1)
-        return logits, predictions
+        """ Perform model forward pass. """
+        output = self.model(x)
+        return output
 
     def training_step(self, train_batch, batch_idx):
-        #x, x_lens, y, _, _ = train_batch
+        # Base -> x, x_lens, y, _, _ = train_batch
+        # Bert -> x, y = train_batch 
         x, y = train_batch
-        # We receive one batch of data and perform a forward pass:
-        logits, preds = self.forward(x)
-        logits = logits.view(-1, logits.shape[-1])
-        labels = y.view(-1).long()
-
+        output = self.forward(x)
+        logits = output.logits    
+    
         # Compute the loss:
-        loss = self.loss_function(logits, labels)
-        self.log('train_loss', loss, prog_bar=True, on_epoch=True)
+        #loss = self.loss_function(logits, labels)
+        loss = output.loss
+        output.loss.backward()
+        self.log('train_loss', loss, prog_bar=True, on_epoch=True)  
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        #x, x_lens, y, _, _ = val_batch
+        # Base -> x, x_lens, y, _, _ = train_batch
+        # Bert -> x, y = train_batch
         x, y = val_batch
-        logits, preds = self.forward(x)
+        output = self.forward(x)
+        logits = output.logits 
         #print("predictions:\t", preds.size())
         #print("labels:\t", y.size())
-        logits = logits.view(-1, logits.shape[-1])
+        preds = torch.argmax(logits, -1)
         labels = y.view(-1).long()
 
         # Compute F1 scores
@@ -229,8 +266,9 @@ class ABSALightningModule(pl.LightningModule):
         self.log('macro_f1', macro_f1, prog_bar=True)
 
         # Compute validation loss
-        sample_loss = self.loss_function(logits, labels)
-        self.log('valid_loss', sample_loss, prog_bar=True, on_epoch=True)
+        # sample_loss = self.loss_function(logits, labels)
+        #val_loss = output.loss
+        #self.log('valid_loss', val_loss, prog_bar=True, on_epoch=True)
         return
 
     def configure_optimizers(self):

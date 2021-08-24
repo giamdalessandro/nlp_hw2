@@ -6,8 +6,9 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
 import pytorch_lightning as pl
+pl.seed_everything(42, workers=True)
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-pl.seed_everything(42, workers=True) 
+from transformers import BertTokenizer, DistilBertTokenizer
 
 from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
@@ -92,16 +93,15 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
     print(f"\t\tprecision: {precision:.2f};\trecall: {recall:.2f};\tf1: {f1:.2f}")
 
 
+
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=raw_collate_fn)
+tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=raw_collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
-# instanciate dataloaders
 train_dataloader = data_module.train_dataloader()
 eval_dataloader  = data_module.eval_dataloader()
-
-print("\n[INFO]: Building model...")
-# instanciate pl.LightningModule for training with task model
 
 #### set model hyper parameters
 hparams = {
@@ -118,11 +118,12 @@ hparams = {
 print("\n[INFO]: Building model ...")
 # instanciate task-specific model
 #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
-task_model = TaskATransformerModel(hparams=hparams)
+task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer)
 
 
 if TRAIN:
     #### Trainer
+    # instanciate pl.LightningModule for training with task model
     model = ABSALightningModule(task_model)
 
     # checkpoint and early stopping callback for pl.Trainer()
@@ -144,7 +145,7 @@ if TRAIN:
 
     # training loop
     trainer = pl.Trainer(
-        gpus=0,
+        gpus=1,
         max_epochs=NUM_EPOCHS,
         logger=logger,
         callbacks=[ckpt_clbk,early_clbk],

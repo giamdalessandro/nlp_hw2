@@ -129,22 +129,19 @@ class TaskAModel(nn.Module):
 
 class TaskATransformerModel(nn.Module):
     # we provide the hyperparameters as input
-    def __init__(self, hparams: dict):
+    def __init__(self, hparams: dict, tokenizer=None):
         super().__init__()
         print_hparams(hparams)
         self.softmax = nn.Softmax()
         self.dropout = nn.Dropout(hparams["dropout"])
 
-        #self.tokenizer = BertTokenizer.from_pretrained(
-        #    "ykacer/bert-base-cased-imdb-sequence-classification")
-        #self.transfModel = BertForTokenClassification.from_pretrained(
-        #    "bert-base-cased",
-        #    num_labels=hparams["output_dim"])
-        self.tokenizer = DistilBertTokenizer.from_pretrained(
-            "distilbert-base-cased")
+        #self.tokenizer = DistilBertTokenizer.from_pretrained(
+        #    "distilbert-base-cased")
+        self.tokenizer   = tokenizer
         self.transfModel = DistilBertForTokenClassification.from_pretrained(
             "distilbert-base-cased",
-            num_labels=hparams["output_dim"])
+            num_labels=hparams["output_dim"]
+        )
 
         # custom classifier head
         classifier_head = nn.Sequential(
@@ -157,9 +154,9 @@ class TaskATransformerModel(nn.Module):
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        #for k, v in tokens.items():
-        #    if not test:   
-        #        tokens[k] = v.cuda()
+        for k, v in tokens.items():
+            if not test:   
+                tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)
@@ -254,9 +251,9 @@ class ABSALightningModule(pl.LightningModule):
         loss = output.loss
         if self.dummy_flag:
             output.loss.backward(retain_graph=True)
+            self.dummy_flag = False
         else:
             output.loss.backward()
-            self.dummy_flag = False
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)  
 
         return loss
@@ -287,6 +284,6 @@ class ABSALightningModule(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-    def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
-        return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
+    #def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
+    #    return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 

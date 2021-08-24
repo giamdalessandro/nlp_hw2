@@ -64,10 +64,12 @@ class ABSADataset(Dataset):
             data_path : str=LAPTOP_TRAIN,
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
-            mode : str="tokenize",
+            mode      : str="tokenize",
+            tokenizer=None,
             vocab=None
         ):
         self.data_path = data_path
+        self.bert_tokenizer = tokenizer
         self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, mode=mode, vocab=vocab)
 
     def _tokenize_line(self, line: str, pattern='\W'):
@@ -159,11 +161,9 @@ class ABSADataset(Dataset):
         words_list   = []
         targets_list = []
         tokenizer = None
-        if bert:
-            #tokenizer = BertTokenizer.from_pretrained(
-            #    "ykacer/bert-base-cased-imdb-sequence-classification")
-            tokenizer = DistilBertTokenizer.from_pretrained(
-                "distilbert-base-cased")
+        #if bert:
+        #    #tokenizer = BertTokenizer.from_pretrained(
+        #    #    "ykacer/bert-base-cased-imdb-sequence-classification")
 
         with open(data_path, "r") as f:
             json_data = json.load(f)
@@ -171,7 +171,7 @@ class ABSADataset(Dataset):
                 t_list = []
                 # tokenize data sentences
                 if bert:
-                    tokens = tokenizer.tokenize(entry["text"])
+                    tokens = self.bert_tokenizer.tokenize(entry["text"])
                     tokens.insert(0, "[CLS]")
                     tokens.append("[SEP]")
                 else:
@@ -294,19 +294,21 @@ class ABSADataModule(pl.LightningDataModule):
     Override of pl.LightningDataModule class to easly handle the ABSADataset for training and evaluation.
     """
     def __init__(self, 
-            train_path: str=LAPTOP_TRAIN, 
-            dev_path  : str=LAPTOP_DEV,
-            batch_size: int=32,
-            in_mode : str="raw",
-            test : bool=False,
-            collate_fn=None
+            train_path : str=LAPTOP_TRAIN, 
+            dev_path   : str=LAPTOP_DEV,
+            batch_size : int=32,
+            in_mode    : str="raw",
+            test       : bool=False,
+            collate_fn=None,
+            tokenizer=None
         ):
         super().__init__()
         self.train_path = train_path
         self.dev_path   = dev_path
         self.batch_size = batch_size
+        self.in_mode    = in_mode
         self.collate_fn = collate_fn
-        self.in_mode = in_mode
+        self.tokenizer  = tokenizer
 
         if not test:
             self.setup()
@@ -318,10 +320,10 @@ class ABSADataModule(pl.LightningDataModule):
         Initialize train and eval datasets from training
         """
         # TODO check if need both dataset together
-        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode, vocab="bert")
+        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode, tokenizer=self.tokenizer, vocab="bert")
         self.vocabulary = self.train_dataset.vocabulary
 
-        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, vocab=self.vocabulary)
+        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, tokenizer=self.tokenizer, vocab=self.vocabulary)
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 

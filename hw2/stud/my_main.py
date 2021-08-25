@@ -147,7 +147,7 @@ if TRAIN:
 
     # training loop
     trainer = pl.Trainer(
-        gpus=1,
+        gpus=0,
         max_epochs=NUM_EPOCHS,
         logger=logger,
         callbacks=[ckpt_clbk,early_clbk],

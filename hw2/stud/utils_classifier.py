@@ -151,9 +151,9 @@ class TaskATransformerModel(nn.Module):
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        for k, v in tokens.items():
-            if not test:   
-                tokens[k] = v.cuda()
+        #for k, v in tokens.items():
+        #    if not test:   
+        #        tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)

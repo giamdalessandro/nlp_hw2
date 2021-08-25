@@ -1,12 +1,11 @@
-import torch
-if torch.cuda.is_available():
-    torch.cuda.empty_cache()
+import pytorch_lightning as pl
+pl.seed_everything(42, workers=True)
 
+import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
-import pytorch_lightning as pl
-pl.seed_everything(42, workers=True)
+
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
 
@@ -17,8 +16,8 @@ from utils_classifier import TaskAModel, TaskATransformerModel, ABSALightningMod
 
 TRAIN      = True
 NUM_EPOCHS = 20
-BATCH_SIZE = 16
-SAVE_NAME  = "transf_2FFh_res2lap_BIO" # test config name
+BATCH_SIZE = 32
+SAVE_NAME  = "transf_2FFh_res2lap_BIO_eps" # test config name
 
 
 def precisions_scores(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
@@ -28,8 +27,8 @@ def precisions_scores(model: pl.LightningModule, l_dataset: DataLoader, l_label_
     for indexed_elem in l_dataset:
         #indexed_in, _, indexed_labels, _, _ = indexed_elem
         indexed_in, indexed_labels = indexed_elem
-        predictions, _ = model(indexed_in)
-        predictions = torch.argmax(predictions, -1).view(-1)
+        outputs = model(indexed_in)
+        predictions = torch.argmax(outputs.logits, -1).view(-1)
         labels = indexed_labels.view(-1)
         valid_indices = labels != 0
         
@@ -67,9 +66,11 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
     model.freeze()
     scores = {"tp": 0, "fp": 0, "fn": 0}
     for elem in l_dataset:
-        inputs, _, labels, tokens, l_terms = elem
-        _, preds = model(inputs)
+        #inputs, _, labels, tokens, l_terms = elempreds
+        inputs, labels = elem
+        outs = model(inputs)
 
+        preds = torch.argmax(outs.logits, -1).view(-1)
         t_preds = get_preds_terms(preds, tokens)
         #print(t_preds)
         ll = []
@@ -100,19 +101,19 @@ tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
 
 data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=raw_collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
-train_dataloader = data_module.train_dataloader()
-eval_dataloader  = data_module.eval_dataloader()
+train_dataloader = data_module.train_dataloader(num_workers=8)
+eval_dataloader  = data_module.eval_dataloader(num_workers=8)
 
 #### set model hyper parameters
 hparams = {
     "embedding_dim" : 768,               # embedding dimension -> (100 GloVe | 768 BertModel)
     "vocab_size"    : len(train_vocab),  # vocab length
-    "lstm_dim"      : 128,               # LSTM hidden layer dim
-    "hidden_dim"    : 64,                # hidden linear layer dim
-    "output_dim"    : len(BIO_TAGS),     # num of BILOU tags to predict
+    "cls_hidden_dim": 64,                # hidden linear layer dim
+    "cls_output_dim": len(BIO_TAGS),     # num of BILOU tags to predict
     "bidirectional" : True,              # if biLSTM or LSTM
+    "lstm_dim"      : 128,               # LSTM hidden layer dim
     "rnn_layers"    : 1,
-    "dropout"       : 0.3
+    "dropout"       : 0.5
 }
 
 print("\n[INFO]: Building model ...")
@@ -145,11 +146,11 @@ if TRAIN:
 
     # training loop
     trainer = pl.Trainer(
-        gpus=1,
+        gpus=0,
         max_epochs=NUM_EPOCHS,
         logger=logger,
         callbacks=[ckpt_clbk,early_clbk],
-        progress_bar_refresh_rate=20
+        progress_bar_refresh_rate=10
     )
 
     # execute training loop
@@ -158,7 +159,7 @@ if TRAIN:
 else:
     print(f"\n[INFO]: Loading saved model '{SAVE_NAME}.ckpt' ...")
     model = ABSALightningModule().load_from_checkpoint(
-        checkpoint_path="model/to_save/transf_allRnn_res2lap_2FF64_BIO.ckpt", 
+        checkpoint_path="model/to_save/transf_2FFh_res2lap_noReLU.ckpt", 
         model=task_model)
 
 
@@ -168,5 +169,5 @@ print("\n[INFO]: precison metrics ...")
 precisions = precisions_scores(model, eval_dataloader, BIO_TAGS)
 evaluate_precision(precisions=precisions)
 
-print("\n[INFO]: evaluate extraction  ...")
-evaluate_extraction(model, eval_dataloader)
+#print("\n[INFO]: evaluate extraction  ...")
+#evaluate_extraction(model, eval_dataloader)

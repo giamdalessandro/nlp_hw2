@@ -22,16 +22,16 @@ BIO_TAGS = {
     "pad": 0,
     "B"  : 1,
     "I"  : 2,
-    "L"  : 3,
-    "O"  : 4
+#    "L"  : 3,
+    "O"  : 3
 }
 
 IDX2LABEL = {
     0 : "pad",
     1 : "B",
     2 : "I",
-    3 : "L",
-    4 : "O"
+#    3 : "L",
+    3 : "O"
 }
 
 
@@ -97,7 +97,7 @@ class ABSADataset(Dataset):
                 inside = False
                 found  = False
                 if bert_tokenizer is not None:
-                    tgt_terms = tokenizer.tokenize(tgt[1], add_special_tokens=True) 
+                    tgt_terms = tokenizer.tokenize(tgt[1]) 
                 else:
                     tgt_terms = self._tokenize_line(tgt[1])
 
@@ -160,10 +160,6 @@ class ABSADataset(Dataset):
         labels    = []
         words_list   = []
         targets_list = []
-        tokenizer = None
-        #if bert:
-        #    #tokenizer = BertTokenizer.from_pretrained(
-        #    #    "ykacer/bert-base-cased-imdb-sequence-classification")
 
         with open(data_path, "r") as f:
             json_data = json.load(f)
@@ -188,7 +184,8 @@ class ABSADataset(Dataset):
                     t_list.append([])
 
                 # tag input tokens
-                tags = self._tag_tokens(targets, tokens, bert_tokenizer=tokenizer)
+                tags = self._tag_tokens(targets, tokens, bert_tokenizer=self.bert_tokenizer)
+                #print(tags)
                 labels.append(tags)
                 
                 if mode == "tokenize":
@@ -336,9 +333,9 @@ class ABSADataModule(pl.LightningDataModule):
 
     def train_dataloader(self, *args, **kwargs):
         #train_dataset = self.train_restaurant if self.mode == "restaurants" else self.train_laptop
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, *args)
 
     def eval_dataloader(self, *args, **kwargs):
         #eval_dataset = self.eval_restaurant if self.mode == "restaurants" else self.eval_laptop
-        return DataLoader(self.eval_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
+        return DataLoader(self.eval_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, *args)
 

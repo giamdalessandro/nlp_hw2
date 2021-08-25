@@ -5,6 +5,7 @@ from torch import nn
 import pytorch_lightning as pl
 from transformers import BertForTokenClassification, BertTokenizer, BertModel, \
                         DistilBertForTokenClassification, DistilBertTokenizer
+from transformers.utils.dummy_pt_objects import DistilBertForSequenceClassification
 
 
 def print_hparams(hparam: dict):
@@ -91,7 +92,7 @@ def raw_collate_fn(data_elements: list):
     y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
     return X, y
 
-
+### Task specific models
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input
     def __init__(self, hparams: dict, embeddings = None):
@@ -132,90 +133,71 @@ class TaskATransformerModel(nn.Module):
     def __init__(self, hparams: dict, tokenizer=None):
         super().__init__()
         print_hparams(hparams)
-        self.softmax = nn.Softmax()
-        self.dropout = nn.Dropout(hparams["dropout"])
 
-        #self.tokenizer = DistilBertTokenizer.from_pretrained(
-        #    "distilbert-base-cased")
         self.tokenizer   = tokenizer
         self.transfModel = DistilBertForTokenClassification.from_pretrained(
             "distilbert-base-cased",
-            num_labels=hparams["output_dim"]
+            num_labels=hparams["cls_output_dim"]
         )
-
         # custom classifier head
         classifier_head = nn.Sequential(
-            nn.Linear(hparams["embedding_dim"], hparams["hidden_dim"]),
-            nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
+            nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
+            nn.ReLU(),
+            nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
         )
         self.transfModel.classifier = classifier_head
+        self.transfModel.dropout = nn.Dropout(hparams["dropout"])
 
-    
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        for k, v in tokens.items():
-            if not test:   
-                tokens[k] = v.cuda()
+        #for k, v in tokens.items():
+        #    if not test:   
+        #        tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)
         return output
 
-"""
-class TaskATransformerModel(nn.Module):
+class TaskBTransformerModel(nn.Module):
     # we provide the hyperparameters as input
-    def __init__(self, hparams: dict):
+    def __init__(self, hparams: dict, tokenizer=None):
         super().__init__()
         print_hparams(hparams)
-        self.softmax = nn.Softmax()
-        self.dropout = nn.Dropout(hparams["dropout"])
 
-        self.tokenizer = BertTokenizer.from_pretrained("ykacer/bert-base-cased-imdb-sequence-classification")
-        self.transfModel = BertForTokenClassification.from_pretrained(
-            "bert-base-cased", 
-            num_labels=5)
+        self.tokenizer   = tokenizer
+        self.transfModel = DistilBertForSequenceClassification.from_pretrained(
+            "distilbert-base-cased",
+            num_labels=hparams["cls_output_dim"]
+        )
+        # custom classifier head
+        classifier_head = nn.Sequential(
+            nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
+            nn.ReLU(),
+            nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
+        )
+        self.transfModel.classifier = classifier_head
+        self.transfModel.dropout = nn.Dropout(hparams["dropout"])
 
-        # Recurrent layer
-        #self.lstm = nn.LSTM(
-        #    input_size=hparams["embedding_dim"], 
-        #    hidden_size=hparams["lstm_dim"], 
-        #    bidirectional=hparams["bidirectional"],
-        #    num_layers=hparams["rnn_layers"], 
-        #    dropout=hparams["dropout"] if hparams["rnn_layers"] > 1 else 0,
-        #    batch_first=True
-        #)
-
-        # classifier head
-        #lstm_output_dim = hparams["lstm_dim"] if hparams["bidirectional"] is False else hparams["lstm_dim"]*2
-        #self.hidden = nn.Linear(lstm_output_dim, hparams["hidden_dim"])
-        #self.output = nn.Linear(hparams["hidden_dim"], hparams["output_dim"])
-    
-    def forward(self, x, test: bool=False):
-        # x -> (raw_sentence,tokenized_targets)
+    def forward(self, x, y=None, test: bool=False):
+        # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        for k, v in tokens.items():
-            if not test:   
-                tokens[k] = v.cuda()
+        #for k, v in tokens.items():
+        #    if not test:   
+        #        tokens[k] = v.cuda()
 
-        transf_out = self.transfModel(**tokens)
-        #transf_out = self.dropout(transf_out.last_hidden_state)
-        #o, (h, c) = self.lstm(transf_out.last_hidden_state)
-        #o = self.dropout(o)
-
-        #hidden = self.hidden(o)
-        #output = self.output(hidden)
-        return transf_out #output
-"""
+        y = y.long() if y is not None else None
+        output = self.transfModel(**tokens, labels=y)
+        return output
 
 
+### pl.LightningModule
 class ABSALightningModule(pl.LightningModule):
     """
     LightningModule to easly handle training and evaluation loops with a given nn.Module.
     """
     def __init__(self, model: nn.Module=None):
         super().__init__()
-        self.dummy_flag = True
         self.model = model
 
         # task A metrics
@@ -234,7 +216,7 @@ class ABSALightningModule(pl.LightningModule):
         )
         return
 
-    def forward(self, x, y):
+    def forward(self, x, y=None):
         """ Perform model forward pass. """
         output = self.model(x, y)
         return output
@@ -247,15 +229,11 @@ class ABSALightningModule(pl.LightningModule):
         logits = output.logits    
     
         # Compute the loss:
+        #labels = y.view(-1).long()
         #loss = self.loss_function(logits, labels)
         loss = output.loss
-        if self.dummy_flag:
-            output.loss.backward(retain_graph=True)
-            self.dummy_flag = False
-        else:
-            output.loss.backward()
-        self.log('train_loss', loss, prog_bar=True, on_epoch=True)  
-
+        #output.loss.backward(retain_graph=True)
+        self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
@@ -274,16 +252,16 @@ class ABSALightningModule(pl.LightningModule):
         self.log('macro_f1', macro_f1, prog_bar=True)
 
         # Compute validation loss
-        # labels = y.view(-1).long()
-        # sample_loss = self.loss_function(logits, labels)
+        #labels = y.view(-1).long()
+        #sample_loss = self.loss_function(logits, labels)
         val_loss = output.loss
         self.log('valid_loss', val_loss, prog_bar=True, on_epoch=True)
-        return
+        return val_loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=2e-5, eps=1e-8)
         return optimizer
 
-    #def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
-    #    return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
+    def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
+        return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 

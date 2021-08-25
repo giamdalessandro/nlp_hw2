@@ -135,8 +135,8 @@ class TaskATransformerModel(nn.Module):
         print_hparams(hparams)
 
         self.tokenizer   = tokenizer
-        self.transfModel = DistilBertForTokenClassification.from_pretrained(
-            "distilbert-base-cased",
+        self.transfModel = BertForTokenClassification.from_pretrained(
+            "bert-base-cased",
             num_labels=hparams["cls_output_dim"]
         )
         # custom classifier head
@@ -151,9 +151,9 @@ class TaskATransformerModel(nn.Module):
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        #for k, v in tokens.items():
-        #    if not test:   
-        #        tokens[k] = v.cuda()
+        for k, v in tokens.items():
+            if not test:   
+                tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)
@@ -259,7 +259,7 @@ class ABSALightningModule(pl.LightningModule):
         return val_loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=2e-5, eps=1e-8)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-5, eps=1e-8)
         return optimizer
 
     def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):

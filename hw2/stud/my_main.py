@@ -97,7 +97,8 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+#tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
 data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=raw_collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
@@ -146,7 +147,7 @@ if TRAIN:
 
     # training loop
     trainer = pl.Trainer(
-        gpus=0,
+        gpus=1,
         max_epochs=NUM_EPOCHS,
         logger=logger,
         callbacks=[ckpt_clbk,early_clbk],

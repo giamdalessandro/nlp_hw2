@@ -259,7 +259,7 @@ class ABSALightningModule(pl.LightningModule):
         return val_loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-5, eps=1e-8)
+        optimizer = torch.optim.Adam(self.parameters(), lr=3e-5, eps=1e-8)
         return optimizer
 
     def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):

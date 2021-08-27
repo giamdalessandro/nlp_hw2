@@ -55,6 +55,68 @@ def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     # return a tensor of size [vocab_size, emb_dim]
     return torch.stack(pretrained, dim=0)
 
+def _read_data_taskA(data_path : str, bert: bool=False, mode: str="tokenize", tokenizer=None, tagger=None):
+    """
+    Reads the dataset and analyze words and targets frequencies.
+    """
+    print(f"\n[dataset]: Loading data from '{data_path}'...")
+    sentences = []
+    labels    = []
+    words_list   = []
+    targets_list = []
+
+    with open(data_path, "r") as f:
+        json_data = json.load(f)
+        for entry in json_data:
+            t_list = []
+            # tokenize data sentences
+            if bert:
+                tokens = tokenizer.tokenize(entry["text"])
+                tokens.insert(0, "[CLS]")
+                tokens.append("[SEP]")
+            else:
+                tokens = tokenizer(entry["text"])
+            words_list.extend(tokens)
+
+            # count target words
+            targets = entry["targets"]
+            if len(targets) > 0:
+                t_list.append(targets)
+                for tgt in targets:
+                    targets_list.append(tgt[1])
+            else:
+                t_list.append([])
+
+            # tag input tokens
+            b_tok = tokenizer if bert else None
+            tags = tagger(targets, tokens, bert_tokenizer=b_tok)
+            #print(tags)
+            labels.append(tags)
+            
+            if mode == "tokenize":
+                sentences.append(tokens)
+            elif mode == "raw":
+                sentences.append(entry["text"])
+            
+
+    assert len(sentences) == len(labels)
+    print("sentences:",len(sentences))
+    print("labels:",len(labels))
+
+    # count words occurency and frequency            
+    word_counter = collections.Counter(words_list)
+    distinct_words = len(word_counter)
+    print(f"Number of distinct words: {len(word_counter)}")
+    
+    # count target words occurency and frequency
+    tgts_counter = collections.Counter(targets_list)
+    distinct_tgts = len(tgts_counter)
+    print(f"Number of distinct targets: {len(tgts_counter)}")
+
+    return sentences, labels, targets_list, word_counter
+
+
+
 
 class ABSADataset(Dataset):
     """
@@ -149,66 +211,27 @@ class ABSADataset(Dataset):
         else:
             return [tags["O"] for t in tokens]
 
-    def _read_data(self, data_path : str, mode: str="tokenize", bert: bool=False):
+    def _read_data(self, 
+        data_path : str, 
+        bert : bool=False, 
+        mode : str="tokenize", 
+        task : str="A"
+        ):
         """
         Reads the dataset and analyze words and targets frequencies.
+
         Args:
         - `mode` : whether to tokenize ("tokenize") or get the raw ("raw") input text.
+        - `task` : preprocess data to perform the particular task {"A", "B", "C" or "D"}.
         """
         print(f"\n[dataset]: Loading data from '{data_path}'...")
-        sentences = []
-        labels    = []
-        words_list   = []
-        targets_list = []
+        print(f"[dataset]: performing task '{task}' preprocessing ...")
+        if task == "A":
+            tokenizer = self._tokenize_line if mode == "tokenize" else self.bert_tokenizer
+            return _read_data_taskA(data_path, bert, mode, tokenizer, tagger=self._tag_tokens)
 
-        with open(data_path, "r") as f:
-            json_data = json.load(f)
-            for entry in json_data:
-                t_list = []
-                # tokenize data sentences
-                if bert:
-                    tokens = self.bert_tokenizer.tokenize(entry["text"])
-                    tokens.insert(0, "[CLS]")
-                    tokens.append("[SEP]")
-                else:
-                    tokens = self._tokenize_line(entry["text"])
-                words_list.extend(tokens)
-
-                # count target words
-                targets = entry["targets"]
-                if len(targets) > 0:
-                    t_list.append(targets)
-                    for tgt in targets:
-                        targets_list.append(tgt[1])
-                else:
-                    t_list.append([])
-
-                # tag input tokens
-                tags = self._tag_tokens(targets, tokens, bert_tokenizer=self.bert_tokenizer)
-                #print(tags)
-                labels.append(tags)
-                
-                if mode == "tokenize":
-                    sentences.append(tokens)
-                elif mode == "raw":
-                    sentences.append(entry["text"])
-                
-
-        assert len(sentences) == len(labels)
-        print("sentences:",len(sentences))
-        print("labels:",len(labels))
-
-        # count words occurency and frequency            
-        word_counter = collections.Counter(words_list)
-        self.distinct_words = len(word_counter)
-        print(f"Number of distinct words: {len(word_counter)}")
-        
-        # count target words occurency and frequency
-        tgts_counter = collections.Counter(targets_list)
-        self.distinct_tgts = len(tgts_counter)
-        print(f"Number of distinct targets: {len(tgts_counter)}")
-
-        return sentences, labels, targets_list, word_counter
+        elif task == "B":
+            return None
     
     def _build_vocab(self, 
             data_path : str,

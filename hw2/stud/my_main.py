@@ -11,9 +11,10 @@ from transformers import BertTokenizer, DistilBertTokenizer
 
 from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
-from utils_classifier import TaskAModel, TaskATransformerModel, ABSALightningModule, \
-                        rnn_collate_fn,  raw_collate_fn, get_preds_terms
+from utils_classifier import TaskAModel, TaskATransformerModel, TaskBTransformerModel, \
+                        ABSALightningModule, rnn_collate_fn,  raw_collate_fn, get_preds_terms
 
+TASK       = "B"  # A, B, C or D
 TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
@@ -98,9 +99,10 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
 #tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
-tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, collate_fn=raw_collate_fn, tokenizer=tokenizer)
+#tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+tokenizer = None
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, 
+                            collate_fn=raw_collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
 train_dataloader = data_module.train_dataloader(num_workers=8)
 eval_dataloader  = data_module.eval_dataloader(num_workers=8)
@@ -120,7 +122,8 @@ hparams = {
 print("\n[INFO]: Building model ...")
 # instanciate task-specific model
 #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
-task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer)
+#task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer)
+task_model = TaskBTransformerModel(hparams=hparams)
 
 
 if TRAIN:

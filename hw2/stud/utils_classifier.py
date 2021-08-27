@@ -3,8 +3,8 @@ import torchmetrics
 from torch import nn
 
 import pytorch_lightning as pl
-from transformers import BertForTokenClassification, BertTokenizer, BertModel, \
-                        DistilBertForTokenClassification, DistilBertTokenizer
+from transformers import BertForTokenClassification, BertTokenizer, \
+                    BertModel, BertForSequenceClassification
 from transformers.utils.dummy_pt_objects import DistilBertForSequenceClassification
 
 
@@ -161,13 +161,13 @@ class TaskATransformerModel(nn.Module):
 
 class TaskBTransformerModel(nn.Module):
     # we provide the hyperparameters as input
-    def __init__(self, hparams: dict, tokenizer=None):
+    def __init__(self, hparams: dict):
         super().__init__()
         print_hparams(hparams)
 
-        self.tokenizer   = tokenizer
-        self.transfModel = DistilBertForSequenceClassification.from_pretrained(
-            "distilbert-base-cased",
+        self.tokenizer   = BertTokenizer.from_pretrained("bert-base-cased")
+        self.transfModel = BertForSequenceClassification.from_pretrained(
+            "bert-base-cased",
             num_labels=hparams["cls_output_dim"]
         )
         # custom classifier head
@@ -182,9 +182,6 @@ class TaskBTransformerModel(nn.Module):
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        #for k, v in tokens.items():
-        #    if not test:   
-        #        tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)

@@ -6,6 +6,7 @@ from nltk import tag
 from nltk.util import pr
 
 import torch
+from torch.utils import data
 import torchtext
 import pytorch_lightning as pl
 from torch.utils.data import Dataset, DataLoader
@@ -18,20 +19,27 @@ LAPTOP_DEV       = "data/laptops_dev.json"
 RESTAURANT_TRAIN = "data/restaurants_train.json"
 RESTAURANT_DEV   = "data/restaurants_dev.json"
 
+#    "L"  : 3,
 BIO_TAGS = {
     "pad": 0,
     "B"  : 1,
     "I"  : 2,
-#    "L"  : 3,
     "O"  : 3
 }
 
+#    3 : "L",
 IDX2LABEL = {
     0 : "pad",
     1 : "B",
     2 : "I",
-#    3 : "L",
     3 : "O"
+}
+
+POLARITY_TAGS = {
+    "positive" : 0,
+    "negative" : 1,
+    "neutral"  : 2,
+    "conflict" : 3
 }
 
 
@@ -55,7 +63,7 @@ def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     # return a tensor of size [vocab_size, emb_dim]
     return torch.stack(pretrained, dim=0)
 
-def _read_data_taskA(data_path : str, bert: bool=False, mode: str="tokenize", tokenizer=None, tagger=None):
+def _read_data_taskA(data_path : str, tokenizer, bert: bool=False, mode: str="tokenize", tagger=None):
     """
     Reads the dataset and analyze words and targets frequencies.
     """
@@ -115,7 +123,52 @@ def _read_data_taskA(data_path : str, bert: bool=False, mode: str="tokenize", to
 
     return sentences, labels, targets_list, word_counter
 
+def _read_data_taskB(data_path : str, mode: str="raw"):
+    """
+    Reads the dataset and analyze words and targets frequencies.
+    """
+    sentences = []
+    labels    = []
+    targets_list = []
 
+    with open(data_path, "r") as f:
+        json_data = json.load(f)
+        for entry in json_data:
+            text    = entry["text"]
+            targets = entry["targets"]
+
+            sent_term  = []
+            pol_labels = []
+            if len(targets) > 0:
+                for tgt in targets:
+                    term = tgt[1]
+                    polarity = tgt[2]
+
+                    sent_term.append([text,term])
+                    pol_labels.append(polarity)
+                    targets_list.append(term)
+
+            else:
+                try:
+                    polarity = entry["categories"][0][1]
+                except:
+                    polarity = "neutral"
+                sent_term.append(text)
+                pol_labels.append(polarity)
+
+            sentences.append(sent_term)
+            labels.append(pol_labels)
+
+    assert len(sentences) == len(labels)
+    print("sentences:",len(sentences))
+    print("labels:",len(labels))
+    
+    # count target words occurency and frequency
+    tgts_counter = collections.Counter(targets_list)
+    distinct_tgts = len(tgts_counter)
+    print(f"Number of distinct targets: {len(tgts_counter)}")
+
+    return sentences, labels, targets_list, None
 
 
 class ABSADataset(Dataset):
@@ -215,7 +268,7 @@ class ABSADataset(Dataset):
         data_path : str, 
         bert : bool=False, 
         mode : str="tokenize", 
-        task : str="A"
+        task : str="B"
         ):
         """
         Reads the dataset and analyze words and targets frequencies.
@@ -228,10 +281,10 @@ class ABSADataset(Dataset):
         print(f"[dataset]: performing task '{task}' preprocessing ...")
         if task == "A":
             tokenizer = self._tokenize_line if mode == "tokenize" else self.bert_tokenizer
-            return _read_data_taskA(data_path, bert, mode, tokenizer, tagger=self._tag_tokens)
+            return _read_data_taskA(data_path, tokenizer, bert, mode, tagger=self._tag_tokens)
 
         elif task == "B":
-            return None
+            return _read_data_taskB(data_path, mode)
     
     def _build_vocab(self, 
             data_path : str,
@@ -340,10 +393,12 @@ class ABSADataModule(pl.LightningDataModule):
         Initialize train and eval datasets from training
         """
         # TODO check if need both dataset together
-        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode, tokenizer=self.tokenizer, vocab="bert")
+        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode, 
+                                        tokenizer=self.tokenizer, vocab="bert")
         self.vocabulary = self.train_dataset.vocabulary
 
-        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, tokenizer=self.tokenizer, vocab=self.vocabulary)
+        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, 
+                                        tokenizer=self.tokenizer, vocab=self.vocabulary)
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 

@@ -229,6 +229,9 @@ class ABSALightningModule(pl.LightningModule):
             mdmc_average="global",
             ignore_index=0
         )
+
+        # task B metrics
+        self.accuracy_fn = torchmetrics.Accuracy(num_classes=4)
         return
 
     def forward(self, x, y=None):
@@ -241,13 +244,16 @@ class ABSALightningModule(pl.LightningModule):
         # Bert -> x, y = train_batch 
         x, y = train_batch
         output = self.forward(x, y)
-        logits = output.logits    
-    
-        # Compute the loss:
-        #labels = y.view(-1).long()
-        #loss = self.loss_function(logits, labels)
+
+        # Training accuracy
+        logits = output.logits   
+        preds = torch.argmax(logits, -1) 
+        train_acc = self.accuracy_fn(preds, y.int())
+        self.log('train_acc', train_acc, prog_bar=True, on_epoch=True)
+
+        # Training loss:
         loss = output.loss
-        #output.loss.backward(retain_graph=True)
+        output.loss.backward(retain_graph=True)
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
 
@@ -256,19 +262,21 @@ class ABSALightningModule(pl.LightningModule):
         # Bert -> x, y = train_batch
         x, y = val_batch
         output = self.forward(x, y)
+
+        # Validation accuracy
         logits = output.logits
         preds = torch.argmax(logits, -1)
+        val_acc = self.accuracy_fn(preds, y.int())
+        self.log('val_acc', val_acc, prog_bar=True, on_epoch=True)
 
-        # Compute F1 scores
+        # Micro-macro F1 scores
         micro_f1 = self.micro_f1(preds, y.int())
         self.log('micro_f1', micro_f1, prog_bar=True)
 
         macro_f1 = self.macro_f1(preds, y.int())
         self.log('macro_f1', macro_f1, prog_bar=True)
 
-        # Compute validation loss
-        #labels = y.view(-1).long()
-        #sample_loss = self.loss_function(logits, labels)
+        # Validation loss
         val_loss = output.loss
         self.log('valid_loss', val_loss, prog_bar=True, on_epoch=True)
         return val_loss
@@ -280,3 +288,12 @@ class ABSALightningModule(pl.LightningModule):
     def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
         return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 
+
+
+
+
+############################
+#labels = y.view(-1).long()
+#loss = self.loss_function(logits, labels)
+#labels = y.view(-1).long()
+#sample_loss = self.loss_function(logits, labels)

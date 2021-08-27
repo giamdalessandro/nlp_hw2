@@ -9,7 +9,7 @@ from sklearn.metrics import precision_score
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
 
-from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
+from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, POLARITY_TAGS, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
 from utils_classifier import TaskAModel, TaskATransformerModel, TaskBTransformerModel, \
                         ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms
@@ -18,7 +18,7 @@ TASK       = "B"  # A, B, C or D
 TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
-SAVE_NAME  = "transf_2FFh_res2lap_BIO_eps" # test config name
+SAVE_NAME  = "BERT_taskB_res2lap_2FFh_eps" # test config name
 
 
 def precisions_scores(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
@@ -133,14 +133,14 @@ if TRAIN:
 
     # checkpoint and early stopping callback for pl.Trainer()
     ckpt_clbk = ModelCheckpoint(
-        monitor="macro_f1",
+        monitor="val_acc",   # macro_f1 -> taskA
         mode="max",
         dirpath="./model/pl_checkpoints/",
         save_last=True,
         save_top_k=2
     )
     early_clbk = EarlyStopping(
-        monitor="macro_f1",
+        monitor="val_acc",   # macro_f1 -> taskA
         patience=5,
         verbose=True,
         mode="max",
@@ -170,7 +170,7 @@ else:
 
 #### compute performances
 print("\n[INFO]: precison metrics ...")
-precisions = precisions_scores(model, eval_dataloader, BIO_TAGS)
+precisions = precisions_scores(model, eval_dataloader, POLARITY_TAGS)  # BIO_TAGS
 evaluate_precision(precisions=precisions)
 
 #print("\n[INFO]: evaluate extraction  ...")

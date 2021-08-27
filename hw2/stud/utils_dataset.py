@@ -145,7 +145,7 @@ def _read_data_taskB(data_path : str, mode: str="raw"):
                     polarity = tgt[2]
 
                     sent_term.append([text,term])
-                    pol_labels.append(polarity)
+                    pol_labels.append(POLARITY_TAGS[polarity])
                     targets_list.append(term)
 
             else:
@@ -154,7 +154,7 @@ def _read_data_taskB(data_path : str, mode: str="raw"):
                 except:
                     polarity = "neutral"
                 sent_term.append(text)
-                pol_labels.append(polarity)
+                pol_labels.append(POLARITY_TAGS[polarity])
 
             sentences.append(sent_term)
             labels.append(pol_labels)

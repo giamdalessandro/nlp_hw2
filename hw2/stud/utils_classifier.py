@@ -92,6 +92,21 @@ def raw_collate_fn(data_elements: list):
     y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
     return X, y
 
+def seq_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
+    """
+    X = []
+    y = []
+    for elem in data_elements:
+        #print(elem)
+        X.extend(elem[0])
+        y.extend(elem[1])
+
+    y = torch.Tensor(y)
+    return X, y
+
 ### Task specific models
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input
@@ -182,6 +197,9 @@ class TaskBTransformerModel(nn.Module):
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
+        #for k, v in tokens.items():
+        #    if not test:   
+        #        tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)

@@ -12,7 +12,7 @@ from transformers import BertTokenizer, DistilBertTokenizer
 from utils_dataset import ABSADataModule, BIO_TAGS, IDX2LABEL, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
 from utils_classifier import TaskAModel, TaskATransformerModel, TaskBTransformerModel, \
-                        ABSALightningModule, rnn_collate_fn,  raw_collate_fn, get_preds_terms
+                        ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms
 
 TASK       = "B"  # A, B, C or D
 TRAIN      = True
@@ -102,7 +102,7 @@ print("\n[INFO]: Loading datasets ...")
 #tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 tokenizer = None
 data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, 
-                            collate_fn=raw_collate_fn, tokenizer=tokenizer)
+                            collate_fn=seq_collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
 train_dataloader = data_module.train_dataloader(num_workers=8)
 eval_dataloader  = data_module.eval_dataloader(num_workers=8)

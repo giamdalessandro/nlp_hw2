@@ -27,20 +27,13 @@ BIO_TAGS = {
     "O"  : 3
 }
 
-#    3 : "L",
-IDX2LABEL = {
-    0 : "pad",
-    1 : "B",
-    2 : "I",
-    3 : "O"
-}
-
 POLARITY_TAGS = {
     "positive" : 0,
     "negative" : 1,
     "neutral"  : 2,
     "conflict" : 3
 }
+
 
 
 def load_pretrained_embeddings(vocabulary: dict, max_size: int):

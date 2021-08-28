@@ -1,3 +1,5 @@
+from typing import List, Dict
+
 import torch
 import torchmetrics
 from torch import nn
@@ -7,7 +9,7 @@ from transformers import BertForTokenClassification, BertTokenizer, \
                     BertModel, BertForSequenceClassification
 from transformers.utils.dummy_pt_objects import DistilBertForSequenceClassification
 
-
+### utils functions
 def print_hparams(hparam: dict):
     print("\n[model]: hyperparameters ...")
     for k, v in hparam.items():
@@ -56,7 +58,7 @@ def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
     #print("vectors out:", vectors.size())
     return vectors
 
-
+### RNNs collate functions
 def rnn_collate_fn(data_elements: list):
     """
     Override the collate function in order to deal with the different sizes of the input 
@@ -100,13 +102,36 @@ def seq_collate_fn(data_elements: list):
     """
     X = []
     y = []
+    terms = []
     for elem in data_elements:
         #print(elem)
         X.extend(elem[0])
         y.extend(elem[1])
+        terms.append(elem[2])
 
     y = torch.Tensor(y)
-    return X, y
+    return X, y, terms
+
+### task predict
+def predict_taskB(model, samples: List[Dict], step_size: int=32):
+    """
+    Perform prediction for task B, step_size element at a time
+    """
+    model.freeze()
+
+    for step in range(0,len(samples), step_size):
+        if step+32 <= len(samples):
+            step_pairs = samples[step:step+step_size]
+        else:
+            step_pairs = samples[step:]
+
+        # data_elems = pre-processing before collate
+        x, y, terms = seq_collate_fn(data_elems)
+        with torch.no_grad():
+            out = model(x, y, terms)
+
+    return
+
 
 
 ### Task specific models
@@ -180,8 +205,9 @@ class TaskATransformerModel(nn.Module):
 
 class TaskBTransformerModel(nn.Module):
     # we provide the hyperparameters as input
-    def __init__(self, hparams: dict):
+    def __init__(self, hparams: dict, device: str="cpu"):
         super().__init__()
+        self.device = device
         self.hparams = hparams
         print_hparams(hparams)
 
@@ -202,9 +228,10 @@ class TaskBTransformerModel(nn.Module):
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        #for k, v in tokens.items():
-        #    if not test:   
-        #        tokens[k] = v.cuda()
+        if self.device == "cuda":
+            for k, v in tokens.items():
+                if not test:   
+                    tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)
@@ -216,9 +243,9 @@ class ABSALightningModule(pl.LightningModule):
     """
     LightningModule to easly handle training and evaluation loops with a given nn.Module.
     """
-    def __init__(self, model: nn.Module=None, test : bool=False):
+    def __init__(self, model: nn.Module=None, test : bool=False, device : str="cpu"):
         super().__init__()
-        self.model = model
+        self.model = model.cuda() if device == "cuda" else model
 
         # task A metrics
         self.loss_function = nn.CrossEntropyLoss(ignore_index=0)
@@ -239,7 +266,7 @@ class ABSALightningModule(pl.LightningModule):
         if not test:
             self.accuracy_fn = torchmetrics.Accuracy(
                 num_classes=self.model.hparams["cls_output_dim"],
-                ignore_index=0
+                ignore_index=0   # ignore dummy "un-polarized" label
             )
         return
 
@@ -250,8 +277,8 @@ class ABSALightningModule(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         # Base -> x, x_lens, y, _, _ = train_batch
-        # Bert -> x, y = train_batch 
-        x, y = train_batch
+        # Bert -> x, y, terms = train_batch 
+        x, y, _ = train_batch
         output = self.forward(x, y)
 
         # Training accuracy
@@ -268,8 +295,8 @@ class ABSALightningModule(pl.LightningModule):
 
     def validation_step(self, val_batch, batch_idx):
         # Base -> x, x_lens, y, _, _ = train_batch
-        # Bert -> x, y = train_batch
-        x, y = val_batch
+        # Bert -> x, y, terms = train_batch
+        x, y, _ = val_batch
         output = self.forward(x, y)
 
         # Validation accuracy

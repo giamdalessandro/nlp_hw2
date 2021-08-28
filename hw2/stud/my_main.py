@@ -19,7 +19,9 @@ TASK       = "B"  # A, B, C or D
 TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
-SAVE_NAME  = f"BERT_task{TASK}_2FFh_gelu_realAcc_eps" # test config name
+
+DEVICE = "cpu"
+SAVE_NAME  = f"BERT_t{TASK}_2FFh_gelu_realAcc_eps" # test config name
 
 
 
@@ -50,13 +52,13 @@ print("\n[INFO]: Building model ...")
 # instanciate task-specific model
 #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
 #task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer)
-task_model = TaskBTransformerModel(hparams=hparams)
+task_model = TaskBTransformerModel(hparams=hparams, device=DEVICE)
 
 
 if TRAIN:
     #### Trainer
     # instanciate pl.LightningModule for training with task model
-    model = ABSALightningModule(task_model)
+    model = ABSALightningModule(task_model, device=DEVICE)
 
     # checkpoint and early stopping callback for pl.Trainer()
     ckpt_clbk = ModelCheckpoint(
@@ -77,7 +79,7 @@ if TRAIN:
 
     # training loop
     trainer = pl.Trainer(
-        gpus=0,
+        gpus=1 if DEVICE == "cuda" else 0,
         max_epochs=NUM_EPOCHS,
         logger=logger,
         callbacks=[ckpt_clbk,early_clbk],

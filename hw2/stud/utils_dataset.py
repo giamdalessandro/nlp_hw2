@@ -340,8 +340,8 @@ class ABSADataset(Dataset):
 
         elif mode == "raw":
             # use raw text as input (required by transformers)
-            for s, l in zip(sentences,labels):
-                self.samples.append((s,l))
+            for s, l, tgt in zip(sentences,labels,targets_list):
+                self.samples.append((s,l,tgt))
         
         return
 

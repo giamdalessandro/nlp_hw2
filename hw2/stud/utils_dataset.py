@@ -19,7 +19,6 @@ LAPTOP_DEV       = "data/laptops_dev.json"
 RESTAURANT_TRAIN = "data/restaurants_train.json"
 RESTAURANT_DEV   = "data/restaurants_dev.json"
 
-#    "L"  : 3,
 BIO_TAGS = {
     "pad": 0,
     "B"  : 1,
@@ -28,10 +27,11 @@ BIO_TAGS = {
 }
 
 POLARITY_TAGS = {
-    "positive" : 0,
-    "negative" : 1,
-    "neutral"  : 2,
-    "conflict" : 3
+    "positive"     : 0,
+    "negative"     : 1,
+    "neutral"      : 2,
+    "conflict"     : 3,
+    "un-polarized" : 4
 }
 
 
@@ -142,10 +142,7 @@ def _read_data_taskB(data_path : str, mode: str="raw"):
                     targets_list.append(term)
 
             else:
-                try:
-                    polarity = entry["categories"][0][1]
-                except:
-                    polarity = "neutral"
+                polarity = "un-polarized"
                 sent_term.append(text)
                 pol_labels.append(POLARITY_TAGS[polarity])
 

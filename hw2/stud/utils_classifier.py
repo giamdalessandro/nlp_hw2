@@ -29,6 +29,16 @@ def get_preds_terms(preds, tokens):
 
     return pred_terms
 
+def get_label_tokens(targets: dict, tokenizer):
+    """
+    Commento sbagliato come un negroni ma senza negroni.
+    """
+    for tgt in targets:
+        if len(tgt[1]) > 0:
+            tokenizer.tokenize(tgt[1])
+
+    return
+
 def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
     # useless if not averaging rnn output
     clean_batch = []
@@ -46,15 +56,6 @@ def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
     #print("vectors out:", vectors.size())
     return vectors
 
-def get_label_tokens(targets: dict, tokenizer):
-    """
-    Commento sbagliato come un negroni ma senza negroni.
-    """
-    for tgt in targets:
-        if len(tgt[1]) > 0:
-            tokenizer.tokenize(tgt[1])
-
-    return
 
 def rnn_collate_fn(data_elements: list):
     """
@@ -107,12 +108,14 @@ def seq_collate_fn(data_elements: list):
     y = torch.Tensor(y)
     return X, y
 
+
 ### Task specific models
 class TaskAModel(nn.Module):
     # we provide the hyperparameters as input
     def __init__(self, hparams: dict, embeddings = None):
         super().__init__()
         print_hparams(hparams)
+        self.hparams = hparams
         self.softmax = nn.Softmax()
         self.dropout = nn.Dropout(hparams["dropout"])
         
@@ -147,6 +150,7 @@ class TaskATransformerModel(nn.Module):
     # we provide the hyperparameters as input
     def __init__(self, hparams: dict, tokenizer=None):
         super().__init__()
+        self.hparams = hparams
         print_hparams(hparams)
 
         self.tokenizer   = tokenizer
@@ -178,6 +182,7 @@ class TaskBTransformerModel(nn.Module):
     # we provide the hyperparameters as input
     def __init__(self, hparams: dict):
         super().__init__()
+        self.hparams = hparams
         print_hparams(hparams)
 
         self.tokenizer   = BertTokenizer.from_pretrained("bert-base-cased")
@@ -231,7 +236,7 @@ class ABSALightningModule(pl.LightningModule):
         )
 
         # task B metrics
-        self.accuracy_fn = torchmetrics.Accuracy(num_classes=4)
+        self.accuracy_fn = torchmetrics.Accuracy(num_classes=self.model.hparams["cls_output_dim"])
         return
 
     def forward(self, x, y=None):

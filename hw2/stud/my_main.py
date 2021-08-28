@@ -35,7 +35,7 @@ hparams = {
     "embedding_dim" : 768,               # embedding dimension -> (100 GloVe | 768 BertModel)
     "vocab_size"    : len(train_vocab),  # vocab length
     "cls_hidden_dim": 64,                # hidden linear layer dim
-    "cls_output_dim": len(BIO_TAGS),     # num of BILOU tags to predict
+    "cls_output_dim": len(POLARITY_TAGS),     # num of BILOU tags to predict
     "bidirectional" : True,              # if biLSTM or LSTM
     "lstm_dim"      : 128,               # LSTM hidden layer dim
     "rnn_layers"    : 1,

@@ -11,7 +11,8 @@ POLARITY_INV = {
     0 : "positive",
     1 : "negative",
     2 : "neutral" ,
-    3 : "conflict"
+    3 : "conflict",
+	4 : "un-polarized"
 }
 #    3 : "L",
 IDX2LABEL = {

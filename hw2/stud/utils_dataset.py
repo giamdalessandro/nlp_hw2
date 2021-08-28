@@ -27,11 +27,11 @@ BIO_TAGS = {
 }
 
 POLARITY_TAGS = {
-    "positive"     : 0,
-    "negative"     : 1,
-    "neutral"      : 2,
-    "conflict"     : 3,
-    "un-polarized" : 4
+    "un-polarized" : 0,
+    "positive"     : 1,
+    "negative"     : 2,
+    "neutral"      : 3,
+    "conflict"     : 4,
 }
 
 

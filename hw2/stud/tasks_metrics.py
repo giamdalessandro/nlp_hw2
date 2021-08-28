@@ -9,11 +9,11 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
 POLARITY_INV = {
-    0 : "positive",
-    1 : "negative",
-    2 : "neutral ",
-    3 : "conflict",
-	4 : "un-polarized"
+	0 : "un-polarized",
+    1 : "positive",
+    2 : "negative",
+    3 : "neutral ",
+    4 : "conflict"
 }
 #    3 : "L",
 IDX2LABEL = {

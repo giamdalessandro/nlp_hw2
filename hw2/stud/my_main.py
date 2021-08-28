@@ -16,10 +16,10 @@ from utils_classifier import TaskAModel, TaskATransformerModel, TaskBTransformer
                         ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms
 
 TASK       = "B"  # A, B, C or D
-TRAIN      = False
+TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
-SAVE_NAME  = f"BERT_task{TASK}_res2lap_2FFh_eps" # test config name
+SAVE_NAME  = f"BERT_task{TASK}_2FFh_gelu_realAcc_eps" # test config name
 
 
 
@@ -90,7 +90,7 @@ if TRAIN:
 else:
     print(f"\n[INFO]: Loading saved model '{SAVE_NAME}.ckpt' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
-        checkpoint_path="model/to_save/BERT_taskB_lap2res_2FFh_gelu_colab.ckpt",
+        checkpoint_path="model/to_save/BERT_taskB_res2res_2FFh_unp.ckpt",
         model=task_model
     )
 

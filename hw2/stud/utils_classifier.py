@@ -193,7 +193,7 @@ class TaskBTransformerModel(nn.Module):
         # custom classifier head
         classifier_head = nn.Sequential(
             nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
         )
         self.transfModel.classifier = classifier_head
@@ -216,7 +216,7 @@ class ABSALightningModule(pl.LightningModule):
     """
     LightningModule to easly handle training and evaluation loops with a given nn.Module.
     """
-    def __init__(self, model: nn.Module=None):
+    def __init__(self, model: nn.Module=None, test : bool=False):
         super().__init__()
         self.model = model
 
@@ -236,7 +236,8 @@ class ABSALightningModule(pl.LightningModule):
         )
 
         # task B metrics
-        self.accuracy_fn = torchmetrics.Accuracy(num_classes=self.model.hparams["cls_output_dim"])
+        if not test:
+            self.accuracy_fn = torchmetrics.Accuracy(num_classes=self.model.hparams["cls_output_dim"])
         return
 
     def forward(self, x, y=None):

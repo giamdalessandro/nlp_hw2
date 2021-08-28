@@ -4,13 +4,14 @@
 # ---------------------------------------------------------#
 import pytorch_lightning as pl
 
+import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
 POLARITY_INV = {
     0 : "positive",
     1 : "negative",
-    2 : "neutral" ,
+    2 : "neutral ",
     3 : "conflict",
 	4 : "un-polarized"
 }
@@ -33,7 +34,7 @@ def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_
         outputs = model(indexed_in)
         predictions = torch.argmax(outputs.logits, -1).view(-1)
         labels = indexed_labels.view(-1)
-        valid_indices = labels != 0
+        valid_indices = labels != 9
         
         valid_predictions = predictions[valid_indices]
         valid_labels = labels[valid_indices]
@@ -102,24 +103,22 @@ def evaluate_sentiment(samples, predictions_b, mode="Aspect Sentiment"):
         sentiment_types = ["anecdotes/miscellaneous", "price", "food", "ambience", "service"]
     else:
         sentiment_types = ["positive", "negative", "neutral", "conflict"]
+
     scores = {sent: {"tp": 0, "fp": 0, "fn": 0} for sent in sentiment_types + ["ALL"]}
     for label, pred in zip(samples, predictions_b):
         for sentiment in sentiment_types:
             if mode == "Aspect Sentiment":
-                pred_sent = {(term_pred[0], term_pred[1]) for term_pred in pred["targets"] if
-                                    term_pred[1] == sentiment}
-                gt_sent = {(term_pred[1], term_pred[2]) for term_pred in label["targets"] if
-                                    term_pred[2] == sentiment}
+                pred_sent = {(term_pred[0], term_pred[1]) for term_pred in pred["targets"] if term_pred[1] == sentiment}
+                gt_sent = {(term_pred[1], term_pred[2]) for term_pred in label["targets"] if term_pred[2] == sentiment}
+
             elif mode == 'Category Extraction' and "categories" in label:
-                pred_sent = {(term_pred[0]) for term_pred in pred["categories"] if
-                                term_pred[0] == sentiment}
-                gt_sent = {(term_pred[0]) for term_pred in label["categories"] if
-                                term_pred[0] == sentiment}
+                pred_sent = {(term_pred[0]) for term_pred in pred["categories"] if term_pred[0] == sentiment}
+                gt_sent = {(term_pred[0]) for term_pred in label["categories"] if term_pred[0] == sentiment}
+
             elif "categories" in label:
-                pred_sent = {(term_pred[0], term_pred[1]) for term_pred in pred["categories"] if
-                                term_pred[1] == sentiment}
-                gt_sent = {(term_pred[0], term_pred[1]) for term_pred in label["categories"] if
-                                term_pred[1] == sentiment}
+                pred_sent = {(term_pred[0], term_pred[1]) for term_pred in pred["categories"] if term_pred[1] == sentiment}
+                gt_sent = {(term_pred[0], term_pred[1]) for term_pred in label["categories"] if term_pred[1] == sentiment}
+
             else:
                 continue
 
@@ -136,8 +135,7 @@ def evaluate_sentiment(samples, predictions_b, mode="Aspect Sentiment"):
             scores[sent_type]["p"], scores[sent_type]["r"] = 0, 0
 
         if not scores[sent_type]["p"] + scores[sent_type]["r"] == 0:
-            scores[sent_type]["f1"] = 2 * scores[sent_type]["p"] * scores[sent_type]["r"] / (
-                    scores[sent_type]["p"] + scores[sent_type]["r"])
+            scores[sent_type]["f1"] = 2 * scores[sent_type]["p"] * scores[sent_type]["r"] / (scores[sent_type]["p"] + scores[sent_type]["r"])
         else:
             scores[sent_type]["f1"] = 0
 
@@ -163,26 +161,14 @@ def evaluate_sentiment(samples, predictions_b, mode="Aspect Sentiment"):
 
     # Compute Macro F1 Scores
     scores["ALL"]["Macro_f1"] = sum([scores[ent_type]["f1"] for ent_type in sentiment_types])/len(sentiment_types)
-    scores["ALL"]["Macro_p"] = sum([scores[ent_type]["p"] for ent_type in sentiment_types])/len(sentiment_types)
-    scores["ALL"]["Macro_r"] = sum([scores[ent_type]["r"] for ent_type in sentiment_types])/len(sentiment_types)
+    scores["ALL"]["Macro_p"]  = sum([scores[ent_type]["p"] for ent_type in sentiment_types])/len(sentiment_types)
+    scores["ALL"]["Macro_r"]  = sum([scores[ent_type]["r"] for ent_type in sentiment_types])/len(sentiment_types)
 
     print(f"{mode} Evaluation\n")
 
-    print(
-        "\tALL\t TP: {};\tFP: {};\tFN: {}".format(
-            scores["ALL"]["tp"],
-            scores["ALL"]["fp"],
-            scores["ALL"]["fn"]))
-    print(
-        "\t\t(m avg): precision: {:.2f};\trecall: {:.2f};\tf1: {:.2f} (micro)".format(
-            precision,
-            recall,
-            f1))
-    print(
-        "\t\t(M avg): precision: {:.2f};\trecall: {:.2f};\tf1: {:.2f} (Macro)\n".format(
-            scores["ALL"]["Macro_p"],
-            scores["ALL"]["Macro_r"],
-            scores["ALL"]["Macro_f1"]))
+    print(f"\tALL\t TP: {scores['ALL']['tp']};\tFP: {scores['ALL']['fp']};\tFN: {scores['ALL']['fn']}")
+    print(f"\t\t(m avg): precision: {precision:.2f};\trecall: {recall:.2f};\tf1: {f1:.2f} (micro)")
+    print(f"\t\t(M avg): precision: {scores['ALL']['Macro_p']:.2f};\trecall: {scores['ALL']['Macro_r']:.2f};\tf1: {scores['ALL']['Macro_f1']:.2f} (Macro)\n")
 
     for sent_type in sentiment_types:
         print("\t{}: \tTP: {};\tFP: {};\tFN: {};\tprecision: {:.2f};\trecall: {:.2f};\tf1: {:.2f};\t{}".format(

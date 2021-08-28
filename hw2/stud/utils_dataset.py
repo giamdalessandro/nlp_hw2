@@ -170,10 +170,12 @@ class ABSADataset(Dataset):
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
             mode      : str="tokenize",
+            task      : str="B",
             tokenizer=None,
             vocab=None
         ):
         self.data_path = data_path
+        self.task = task
         self.bert_tokenizer = tokenizer
         self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, mode=mode, vocab=vocab)
 
@@ -297,7 +299,7 @@ class ABSADataset(Dataset):
             - `pad_token` : token to indicate padding;
         """       
         # read data form file
-        sentences, labels, targets_list, word_counter = self._read_data(data_path, mode=mode, bert=True)
+        sentences, labels, targets_list, word_counter = self._read_data(data_path, mode=mode, bert=True, task=self.task)
 
         # build vocabulary on data if none is given
         if vocab is None:

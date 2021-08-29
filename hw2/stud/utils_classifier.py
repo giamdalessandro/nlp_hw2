@@ -1,5 +1,3 @@
-from typing import List, Dict
-
 import torch
 import torchmetrics
 from torch import nn
@@ -8,6 +6,8 @@ import pytorch_lightning as pl
 from transformers import BertForTokenClassification, BertTokenizer, \
                     BertModel, BertForSequenceClassification
 from transformers.utils.dummy_pt_objects import DistilBertForSequenceClassification
+
+
 
 ### utils functions
 def print_hparams(hparam: dict):
@@ -98,7 +98,7 @@ def raw_collate_fn(data_elements: list):
 def seq_collate_fn(data_elements: list):
     """
     Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
+    index sequences. (data_elements is a list of (x, y, terms) tuples, where x is raw input text)
     """
     X = []
     y = []
@@ -107,31 +107,10 @@ def seq_collate_fn(data_elements: list):
         #print(elem)
         X.extend(elem[0])
         y.extend(elem[1])
-        terms.append(elem[2])
+        terms.extend(elem[2])
 
     y = torch.Tensor(y)
     return X, y, terms
-
-### task predict
-def predict_taskB(model, samples: List[Dict], step_size: int=32):
-    """
-    Perform prediction for task B, step_size element at a time
-    """
-    model.freeze()
-
-    for step in range(0,len(samples), step_size):
-        if step+32 <= len(samples):
-            step_pairs = samples[step:step+step_size]
-        else:
-            step_pairs = samples[step:]
-
-        # data_elems = pre-processing before collate
-        x, y, terms = seq_collate_fn(data_elems)
-        with torch.no_grad():
-            out = model(x, y, terms)
-
-    return
-
 
 
 ### Task specific models

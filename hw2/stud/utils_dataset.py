@@ -35,6 +35,10 @@ POLARITY_TAGS = {
 }
 
 
+def read_json_data(data_path : str):
+    """ Load dataset from JSON file to Dict."""
+    f = open(data_path, "r")
+    return json.load(f)
 
 def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     """
@@ -116,7 +120,7 @@ def _read_data_taskA(data_path : str, tokenizer, bert: bool=False, mode: str="to
 
     return sentences, labels, targets_list, word_counter
 
-def _read_data_taskB(data_path : str, mode: str="raw"):
+def _read_data_taskB(data_path : str="path", test: bool=False, test_samples=None):
     """
     Reads the dataset and analyze words and targets frequencies.
     """
@@ -124,41 +128,45 @@ def _read_data_taskB(data_path : str, mode: str="raw"):
     labels    = []
     targets_list = []
 
-    with open(data_path, "r") as f:
-        json_data = json.load(f)
-        for entry in json_data:
-            text    = entry["text"]
-            targets = entry["targets"]
+    data_dict = read_json_data(data_path) if not test else test_samples
+    for entry in data_dict:
+        text    = entry["text"]
+        targets = entry["targets"]
 
-            sent_term  = []
-            pol_labels = []
-            if len(targets) > 0:
-                for tgt in targets:
-                    term = tgt[1]
-                    polarity = tgt[2]
+        sent_term  = []
+        pol_labels = []
+        term_list  = []
+        if len(targets) > 0:
+            for tgt in targets:
+                term = tgt[1]
+                polarity = tgt[2]
 
-                    sent_term.append([text,term])
-                    pol_labels.append(POLARITY_TAGS[polarity])
-                    targets_list.append(term)
-
-            else:
-                polarity = "un-polarized"
-                sent_term.append(text)
+                sent_term.append([text,term])
                 pol_labels.append(POLARITY_TAGS[polarity])
+                term_list.append(term)
 
-            sentences.append(sent_term)
-            labels.append(pol_labels)
+        else:
+            polarity = "un-polarized"
+            sent_term.append(text)
+            pol_labels.append(POLARITY_TAGS[polarity])
+            term_list.append("")
+
+        sentences.append(sent_term)
+        labels.append(pol_labels)
+        targets_list.append(term_list)
 
     assert len(sentences) == len(labels)
-    print("sentences:",len(sentences))
-    print("labels:",len(labels))
-    
-    # count target words occurency and frequency
-    tgts_counter = collections.Counter(targets_list)
-    distinct_tgts = len(tgts_counter)
-    print(f"Number of distinct targets: {len(tgts_counter)}")
+    if not test:
+        print("sentences:",len(sentences))
+        print("labels:",len(labels))
+        
+        # count target words occurency and frequency
+        tgts_counter = collections.Counter(targets_list)
+        print(f"Number of distinct targets: {len(tgts_counter)}")
+        return sentences, labels, targets_list, None
 
-    return sentences, labels, targets_list, None
+    else:
+        return zip(sentences,labels,targets_list)
 
 
 class ABSADataset(Dataset):

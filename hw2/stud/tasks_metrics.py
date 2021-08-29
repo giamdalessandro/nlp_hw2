@@ -1,15 +1,19 @@
-# -------------------------------------------------------- #
+# --------------------------------------------------------------- #
 #  To better test my models I have implemented (locally) the same 
-#  evaluation functions provided in the docker test. 
-# ---------------------------------------------------------#
+#  evaluation metrics provided in the docker test. 
+# --------------------------------------------------------------- #
+from typing import List, Dict
 import pytorch_lightning as pl
 
 import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
+from utils_dataset import _read_data_taskB
+from utils_classifier import seq_collate_fn
+
 POLARITY_INV = {
-	0 : "un-polarized",
+	0 : "un-polarized",   # dummy label for sentences with no target
     1 : "positive",
     2 : "negative",
     3 : "neutral ",
@@ -24,6 +28,54 @@ IDX2LABEL = {
 }
 
 
+### task predict
+def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV):
+    """
+    Perform prediction for task B, step_size element at a time
+    """
+    model.freeze()
+    predicted = []  # List[Dict] for output
+
+    # pre-processing data
+    data_elems = _read_data_taskB(test=True, test_samples=samples)
+
+    for step in range(0,len(data_elems), step_size):
+        # test step_size samples at a time
+        if step+32 <= len(data_elems):
+            step_pairs = samples[step:step+step_size]
+        else:
+            step_pairs = samples[step:]
+
+        # use collate_fn to input step_size samples into the model
+        x, y, gt_terms = seq_collate_fn(step_pairs)
+        with torch.no_grad():
+            # predict with model
+            out = model(x)
+            logits = out.logits   
+            pred_labels = torch.argmax(logits, -1)
+
+            # build (term,aspect) couples to produce correct output for the metrics
+            preds = []
+            prev_text = x[0] if isinstance(x[0], str) else x[0][0]
+            for i in range(len(gt_terms)): 
+                text = x[i] if isinstance(x[i], str) else x[i][0]
+                if prev_text != text: 
+                    # when input text changes we are dealing with another set of targets,
+                    # i.e. another prediction.
+                    predicted.append({"targets":preds})
+                    prev_text = text
+                    preds = []
+
+                if gt_terms[i] != "" and pred_labels[i] != "un-polarized":          
+                    # there is a prediction only if there is a ground truth term 
+                    # and the related polarity.  
+                    preds.append((gt_terms[i],POLARITY_INV[pred_labels[i]]))
+
+
+    return predicted
+
+
+### metrics
 def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
     model.freeze()
     all_predictions = []

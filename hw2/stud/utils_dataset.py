@@ -34,7 +34,7 @@ POLARITY_TAGS = {
     "conflict"     : 4,
 }
 
-
+### utils
 def read_json_data(data_path : str):
     """ Load dataset from JSON file to Dict."""
     f = open(data_path, "r")
@@ -157,16 +157,9 @@ def _read_data_taskB(data_path : str="path", test: bool=False, test_samples=None
 
     assert len(sentences) == len(labels)
     if not test:
-        print("sentences:",len(sentences))
-        print("labels:",len(labels))
-        
-        # count target words occurency and frequency
-        tgts_counter = collections.Counter(targets_list)
-        print(f"Number of distinct targets: {len(tgts_counter)}")
         return sentences, labels, targets_list, None
-
     else:
-        return zip(sentences,labels,targets_list)
+        return list(zip(sentences,labels,targets_list))
 
 
 class ABSADataset(Dataset):
@@ -284,7 +277,7 @@ class ABSADataset(Dataset):
             return _read_data_taskA(data_path, tokenizer, bert, mode, tagger=self._tag_tokens)
 
         elif task == "B":
-            return _read_data_taskB(data_path, mode)
+            return _read_data_taskB(data_path, test=False)
     
     def _build_vocab(self, 
             data_path : str,

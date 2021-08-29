@@ -115,6 +115,9 @@ def seq_collate_fn(data_elements: list):
 
 ### Task specific models
 class TaskAModel(nn.Module):
+    """
+    Torch nn.Module to perform task A (aspect term extraction).
+    """
     # we provide the hyperparameters as input
     def __init__(self, hparams: dict, embeddings = None):
         super().__init__()
@@ -151,7 +154,9 @@ class TaskAModel(nn.Module):
         return output
 
 class TaskATransformerModel(nn.Module):
-    # we provide the hyperparameters as input
+    """
+    Torch nn.Module to perform task A (aspect term extraction) with the help of a tranformer.
+    """
     def __init__(self, hparams: dict, tokenizer=None):
         super().__init__()
         self.hparams = hparams
@@ -183,10 +188,12 @@ class TaskATransformerModel(nn.Module):
         return output
 
 class TaskBTransformerModel(nn.Module):
-    # we provide the hyperparameters as input
+    """
+    Torch nn.Module to perform task B (aspect sentiment classification) with the help of a tranformer.
+    """
     def __init__(self, hparams: dict, device: str="cpu"):
         super().__init__()
-        self.device = device
+        self.device  = device
         self.hparams = hparams
         print_hparams(hparams)
 
@@ -212,7 +219,7 @@ class TaskBTransformerModel(nn.Module):
                 if not test:   
                     tokens[k] = v.cuda()
 
-        y = y.long() if y is not None else None
+        y = None if (y is None or test) else y.long()
         output = self.transfModel(**tokens, labels=y)
         return output
 
@@ -224,7 +231,7 @@ class ABSALightningModule(pl.LightningModule):
     """
     def __init__(self, model: nn.Module=None, test : bool=False, device : str="cpu"):
         super().__init__()
-        self.model = model.cuda() if device == "cuda" else model
+        self.model  = model.cuda() if device == "cuda" else model
 
         # task A metrics
         self.loss_function = nn.CrossEntropyLoss(ignore_index=0)

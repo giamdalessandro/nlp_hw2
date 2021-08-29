@@ -42,9 +42,9 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
     for step in range(0,len(data_elems), step_size):
         # test step_size samples at a time
         if step+32 <= len(data_elems):
-            step_pairs = samples[step:step+step_size]
+            step_pairs = data_elems[step:step+step_size]
         else:
-            step_pairs = samples[step:]
+            step_pairs = data_elems[step:]
 
         # use collate_fn to input step_size samples into the model
         x, y, gt_terms = seq_collate_fn(step_pairs)
@@ -66,10 +66,10 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
                     prev_text = text
                     preds = []
 
-                if gt_terms[i] != "" and pred_labels[i] != "un-polarized":          
+                if gt_terms[i] != "" and int(pred_labels[i]) != 4:   # 4 -> "un-polarized"         
                     # there is a prediction only if there is a ground truth term 
                     # and the related polarity.  
-                    preds.append((gt_terms[i],POLARITY_INV[pred_labels[i]]))
+                    preds.append((gt_terms[i],label_tags[int(pred_labels[i])]))
 
 
     return predicted
@@ -82,11 +82,11 @@ def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_
     all_labels = []
     for indexed_elem in l_dataset:
         #indexed_in, _, indexed_labels, _, _ = indexed_elem
-        indexed_in, indexed_labels = indexed_elem
+        indexed_in, indexed_labels, _ = indexed_elem
         outputs = model(indexed_in)
         predictions = torch.argmax(outputs.logits, -1).view(-1)
         labels = indexed_labels.view(-1)
-        valid_indices = labels != 9
+        valid_indices = labels != 0   # 0 -> dummy label or padding label
         
         valid_predictions = predictions[valid_indices]
         valid_labels = labels[valid_indices]
@@ -149,15 +149,15 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
     print(f"\tAspects\t TP: {scores['tp']};\tFP: {scores['fp']};\tFN: {scores['fn']}")
     print(f"\t\tprecision: {precision:.2f};\trecall: {recall:.2f};\tf1: {f1:.2f}")
 
-def evaluate_sentiment(samples, predictions_b, mode="Aspect Sentiment"):
+def evaluate_sentiment(samples, predictions, mode="Aspect Sentiment"):
     scores = {}
     if mode == 'Category Extraction':
         sentiment_types = ["anecdotes/miscellaneous", "price", "food", "ambience", "service"]
     else:
-        sentiment_types = ["positive", "negative", "neutral", "conflict"]
+        sentiment_types = ["positive", "negative", "neutral ", "conflict"]
 
     scores = {sent: {"tp": 0, "fp": 0, "fn": 0} for sent in sentiment_types + ["ALL"]}
-    for label, pred in zip(samples, predictions_b):
+    for label, pred in zip(samples, predictions):
         for sentiment in sentiment_types:
             if mode == "Aspect Sentiment":
                 pred_sent = {(term_pred[0], term_pred[1]) for term_pred in pred["targets"] if term_pred[1] == sentiment}
@@ -218,12 +218,12 @@ def evaluate_sentiment(samples, predictions_b, mode="Aspect Sentiment"):
 
     print(f"{mode} Evaluation\n")
 
-    print(f"\tALL\t TP: {scores['ALL']['tp']};\tFP: {scores['ALL']['fp']};\tFN: {scores['ALL']['fn']}")
+    print(f"\tALL\t TP: {scores['ALL']['tp']};  FP: {scores['ALL']['fp']};  FN: {scores['ALL']['fn']}")
     print(f"\t\t(m avg): precision: {precision:.2f};\trecall: {recall:.2f};\tf1: {f1:.2f} (micro)")
     print(f"\t\t(M avg): precision: {scores['ALL']['Macro_p']:.2f};\trecall: {scores['ALL']['Macro_r']:.2f};\tf1: {scores['ALL']['Macro_f1']:.2f} (Macro)\n")
 
     for sent_type in sentiment_types:
-        print("\t{}: \tTP: {};\tFP: {};\tFN: {};\tprecision: {:.2f};\trecall: {:.2f};\tf1: {:.2f};\t{}".format(
+        print("\t{} -> \tTP: {};\tFP: {};  \tFN: {};  \tprecision: {:.2f};\trecall: {:.2f};\tf1: {:.2f};\t{}".format(
             sent_type,
             scores[sent_type]["tp"],
             scores[sent_type]["fp"],
@@ -232,7 +232,6 @@ def evaluate_sentiment(samples, predictions_b, mode="Aspect Sentiment"):
             scores[sent_type]["r"],
             scores[sent_type]["f1"],
             scores[sent_type]["tp"] +
-            scores[sent_type][
-                "fp"]))
+            scores[sent_type]["fp"]))
 
     return scores, precision, recall, f1

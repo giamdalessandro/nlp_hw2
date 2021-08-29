@@ -11,12 +11,12 @@ from transformers import BertTokenizer, DistilBertTokenizer
 
 from tasks_metrics import *
 from utils_dataset import ABSADataModule, BIO_TAGS, POLARITY_TAGS, \
-                        LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN
+                        LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, read_json_data
 from utils_classifier import TaskAModel, TaskATransformerModel, TaskBTransformerModel, \
                         ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms
 
 TASK       = "B"  # A, B, C or D
-TRAIN      = True
+TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
@@ -25,34 +25,38 @@ SAVE_NAME  = f"BERT_t{TASK}_2FFh_gelu_realAcc_eps" # test config name
 
 
 
-#### Load train and eval data
-print("\n[INFO]: Loading datasets ...")
-#tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
-#tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-tokenizer = None
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, 
-                            collate_fn=seq_collate_fn, tokenizer=tokenizer)
-train_vocab = data_module.vocabulary
-train_dataloader = data_module.train_dataloader(num_workers=8)
-eval_dataloader  = data_module.eval_dataloader(num_workers=8)
-
 #### set model hyper parameters
 hparams = {
-    "embedding_dim" : 768,               # embedding dimension -> (100 GloVe | 768 BertModel)
-    "vocab_size"    : len(train_vocab),  # vocab length
-    "cls_hidden_dim": 64,                # hidden linear layer dim
-    "cls_output_dim": len(POLARITY_TAGS),     # num of BILOU tags to predict
-    "bidirectional" : True,              # if biLSTM or LSTM
-    "lstm_dim"      : 128,               # LSTM hidden layer dim
+    "embedding_dim" : 768,                 # embedding dimension -> (100 GloVe | 768 BertModel)
+    "cls_hidden_dim": 64,                  # hidden linear layer dim
+    "cls_output_dim": len(POLARITY_TAGS),  # num of BILOU tags to predict
+    "bidirectional" : True,                # if biLSTM or LSTM
+    "lstm_dim"      : 128,                 # LSTM hidden layer dim
     "rnn_layers"    : 1,
     "dropout"       : 0.5
 }
 
+#### Load train and eval data
+print("\n[INFO]: Loading datasets ...")
+#tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+tokenizer = BertTokenizer.from_pretrained("bert-base-cased") if TASK == "A" else None
+data_module = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=RESTAURANT_DEV, 
+                            collate_fn=seq_collate_fn, tokenizer=tokenizer)
+train_vocab = data_module.vocabulary
+hparams["vocab_size"] = len(train_vocab) # vocab length
+
+train_dataloader = data_module.train_dataloader(num_workers=8)
+eval_dataloader  = data_module.eval_dataloader(num_workers=8)
+
+
 print("\n[INFO]: Building model ...")
 # instanciate task-specific model
-#task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
-#task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer)
-task_model = TaskBTransformerModel(hparams=hparams, device=DEVICE)
+if TASK == "A":
+    #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
+    task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer)
+
+elif TASK == "B":
+    task_model = TaskBTransformerModel(hparams=hparams, device=DEVICE)
 
 
 if TRAIN:
@@ -90,9 +94,10 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    print(f"\n[INFO]: Loading saved model '{SAVE_NAME}.ckpt' ...")
+    LOAD_NAME = "BERT_taskB_lap2lap_2FFh_unp_colab"
+    print(f"\n[INFO]: Loading saved model '{LOAD_NAME}.ckpt' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
-        checkpoint_path="model/to_save/BERT_taskB_res2res_2FFh_unp.ckpt",
+        checkpoint_path=F"model/to_save/{LOAD_NAME}.ckpt",
         model=task_model
     )
 
@@ -105,3 +110,8 @@ evaluate_precision(precisions=precisions)
 
 #print("\n[INFO]: evaluate extraction  ...")
 #evaluate_extraction(model, eval_dataloader)
+
+print("\n[INFO]: evaluate sentiment  ...")
+samples = read_json_data(RESTAURANT_DEV)
+predictions = predict_taskB(model, samples=samples)
+evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")

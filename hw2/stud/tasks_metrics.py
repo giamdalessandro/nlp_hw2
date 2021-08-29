@@ -111,7 +111,7 @@ def evaluate_precision(precisions: dict, label_d: dict=POLARITY_INV):
     print(f"Macro Precision: {precisions['macro_precision']}")
 
     print("Per class Precision:")
-    print("\tlabel\tscore")
+    print("\tlabel  \tscore")
     for idx_class, precision in sorted(enumerate(per_class_precision), key=lambda elem: -elem[1]):
         label = label_d[idx_class]
         print(f"\t{label}\t{precision:.4f}")

@@ -40,7 +40,7 @@ hparams = {
 print("\n[INFO]: Loading datasets ...")
 #tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
 tokenizer = BertTokenizer.from_pretrained("bert-base-cased") if TASK == "A" else None
-data_module = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=RESTAURANT_DEV, 
+data_module = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=LAPTOP_DEV, 
                             collate_fn=seq_collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
 hparams["vocab_size"] = len(train_vocab) # vocab length
@@ -94,8 +94,8 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "BERT_taskB_lap2lap_2FFh_unp_colab"
-    print(f"\n[INFO]: Loading saved model '{LOAD_NAME}.ckpt' ...")
+    LOAD_NAME = "BERT_tB_res2lap_2FFh_gelu3_colab"
+    print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/{LOAD_NAME}.ckpt",
         model=task_model
@@ -112,6 +112,6 @@ evaluate_precision(precisions=precisions)
 #evaluate_extraction(model, eval_dataloader)
 
 print("\n[INFO]: evaluate sentiment  ...")
-samples = read_json_data(RESTAURANT_DEV)
+samples = read_json_data(LAPTOP_DEV)
 predictions = predict_taskB(model, samples=samples)
 evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")

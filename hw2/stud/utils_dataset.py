@@ -161,6 +161,47 @@ def _read_data_taskB(data_path : str="path", test: bool=False, test_samples=None
     else:
         return list(zip(sentences,labels,targets_list))
 
+def _read_data_taskD(data_path : str="path", test: bool=False, test_samples=None):
+    """
+    Reads the dataset and analyze words and targets frequencies.
+    """
+    sentences = []
+    labels    = []
+    targets_list = []
+
+    data_dict = read_json_data(data_path) if not test else test_samples
+    for entry in data_dict:
+        text = entry["text"]
+        categories = entry["categories"]
+
+        sent_cats  = []
+        pol_labels = []
+        cats_list  = []
+        #if len(categories) > 0:
+        for cat in categories:
+            category = cat[1]
+            polarity = cat[2]
+
+            sent_cats.append([text,cat])
+            pol_labels.append(POLARITY_TAGS[polarity])
+            cats_list.append(category)
+
+        #else:
+        #    polarity = "un-polarized"
+        #    sent_cats.append([text,""])
+        #    pol_labels.append(POLARITY_TAGS[polarity])
+        #    cats_list.append("")
+
+        sentences.append(sent_cats)
+        labels.append(pol_labels)
+        targets_list.append(cats_list)
+
+    assert len(sentences) == len(labels)
+    if not test:
+        return sentences, labels, targets_list, None
+    else:
+        return list(zip(sentences,labels,targets_list))
+
 
 class ABSADataset(Dataset):
     """
@@ -279,6 +320,12 @@ class ABSADataset(Dataset):
         elif task == "B":
             return _read_data_taskB(data_path, test=False)
     
+        elif task == "C":
+            return None
+
+        elif task == "D":
+            return _read_data_taskD(data_path, test=False)
+
     def _build_vocab(self, 
             data_path : str,
             vocab_size: int=3500, 

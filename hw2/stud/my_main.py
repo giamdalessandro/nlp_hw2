@@ -2,9 +2,9 @@ import pytorch_lightning as pl
 pl.seed_everything(42, workers=True)
 
 import torch, gc
-#if torch.cuda.is_available():
-#  gc.collect()
-#  torch.cuda.empty_cache()
+if torch.cuda.is_available():
+  gc.collect()
+  torch.cuda.empty_cache()
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
@@ -47,7 +47,7 @@ elif TASK == "B":
     tokenizer = None
     collate_fn = seq_collate_fn
 
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, task=TASK, 
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, task=TASK, 
                             collate_fn=collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
 hparams["vocab_size"] = len(train_vocab) # vocab length
@@ -60,7 +60,7 @@ print("\n[INFO]: Building model ...")
 # instanciate task-specific model
 if TASK == "A":
     #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
-    task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer)
+    task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer, device=DEVICE)
 
 elif TASK == "B":
     task_model = TaskBTransformerModel(hparams=hparams, device=DEVICE)
@@ -101,7 +101,7 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "basic_allBiLSTM_res2lap_2FF64_BIO"
+    LOAD_NAME = "BERT_tA_res2lap_2FFh_gelu_eps"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
@@ -111,15 +111,17 @@ else:
 
 
 #### compute performances -----------------------------
+label_dict = BIO_TAGS if TASK == "A" else POLARITY_TAGS
+
 if METRICS:
     print("\n[INFO]: precison metrics ...")
-    precisions = precision_metrics(model, eval_dataloader, POLARITY_TAGS)  # BIO_TAGS
+    precisions = precision_metrics(model, eval_dataloader, label_dict)  # BIO_TAGS
     evaluate_precision(precisions=precisions)
 
     #print("\n[INFO]: evaluate extraction  ...")
     #evaluate_extraction(model, eval_dataloader)
 
-    print("\n[INFO]: evaluate sentiment  ...")
-    samples = read_json_data(LAPTOP_DEV)
-    predictions = predict_taskB(model, samples=samples)
-    evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")
+    #print("\n[INFO]: evaluate sentiment  ...")
+    #samples = read_json_data(LAPTOP_DEV)
+    #predictions = predict_taskB(model, samples=samples)
+    #evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")

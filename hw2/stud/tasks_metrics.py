@@ -115,7 +115,7 @@ def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_
             "macro_precision":macro_precision, 
             "per_class_precision":per_class_precision}
 
-def evaluate_precision(precisions: dict, label_d: dict=POLARITY_INV):
+def evaluate_precision(precisions: dict, label_d: dict=IDX2LABEL):
     per_class_precision = precisions["per_class_precision"]
     print(f"Micro Precision: {precisions['micro_precision']}")
     print(f"Macro Precision: {precisions['macro_precision']}")

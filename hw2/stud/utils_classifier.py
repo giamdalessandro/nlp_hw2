@@ -235,28 +235,28 @@ class ABSALightningModule(pl.LightningModule):
     def __init__(self, model: nn.Module=None, test : bool=False, device : str="cpu"):
         super().__init__()
         self.model  = model.cuda() if device == "cuda" else model
+        num_classes = self.model.hparams["cls_output_dim"] if not test else 2
 
         # task A metrics
         self.loss_function = nn.CrossEntropyLoss(ignore_index=0)
         self.micro_f1 = torchmetrics.F1(
-            num_classes=5,
+            num_classes=num_classes,
             average="micro",
             mdmc_average="global",
             ignore_index=0
         )
         self.macro_f1 = torchmetrics.F1(
-            num_classes=5,
+            num_classes=num_classes,
             average="macro",
             mdmc_average="global",
             ignore_index=0
         )
 
         # task B metrics
-        if not test:
-            self.accuracy_fn = torchmetrics.Accuracy(
-                num_classes=self.model.hparams["cls_output_dim"],
-                ignore_index=0   # ignore dummy "un-polarized" label
-            )
+        self.accuracy_fn = torchmetrics.Accuracy(
+            num_classes=num_classes,
+            ignore_index=0   # ignore dummy "un-polarized" label
+        )
         return
 
     def forward(self, x, y=None):

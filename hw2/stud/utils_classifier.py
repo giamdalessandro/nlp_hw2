@@ -93,7 +93,7 @@ def raw_collate_fn(data_elements: list):
         y.append(torch.Tensor(elem[1]))
 
     y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, y
+    return X, y, None
 
 def seq_collate_fn(data_elements: list):
     """
@@ -157,9 +157,10 @@ class TaskATransformerModel(nn.Module):
     """
     Torch nn.Module to perform task A (aspect term extraction) with the help of a tranformer.
     """
-    def __init__(self, hparams: dict, tokenizer=None):
+    def __init__(self, hparams: dict, tokenizer=None, device: str="cpu"):
         super().__init__()
         self.hparams = hparams
+        self.device = device
         print_hparams(hparams)
 
         self.tokenizer   = tokenizer
@@ -179,9 +180,10 @@ class TaskATransformerModel(nn.Module):
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
         tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
-        #for k, v in tokens.items():
-        #    if not test:   
-        #        tokens[k] = v.cuda()
+        if self.device == "cuda":
+            for k, v in tokens.items():
+                if not test:   
+                    tokens[k] = v.cuda()
 
         y = y.long() if y is not None else None
         output = self.transfModel(**tokens, labels=y)
@@ -213,7 +215,8 @@ class TaskBTransformerModel(nn.Module):
 
     def forward(self, x, y=None, test: bool=False):
         # x -> raw_input
-        tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
+        tokens = self.tokenizer([x[i][0] for i in range(len(x))], [x[i][1] for i in range(len(x))], 
+                                return_tensors='pt', padding=True, truncation=True)
         if self.device == "cuda":
             for k, v in tokens.items():
                 if not test:   

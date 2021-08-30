@@ -16,7 +16,7 @@ POLARITY_INV = {
 	0 : "un-polarized",   # dummy label for sentences with no target
     1 : "positive",
     2 : "negative",
-    3 : "neutral ",
+    3 : "neutral",
     4 : "conflict"
 }
 #    3 : "L",
@@ -121,10 +121,10 @@ def evaluate_precision(precisions: dict, label_d: dict=POLARITY_INV):
     print(f"Macro Precision: {precisions['macro_precision']}")
 
     print("Per class Precision:")
-    print("\tlabel  \tscore")
+    print("\tlabel \t\tscore")
     for idx_class, precision in sorted(enumerate(per_class_precision), key=lambda elem: -elem[1]):
         label = label_d[idx_class]
-        print(f"\t{label}\t{precision:.4f}")
+        print(f"\t{label} \t{precision:.4f}")
 
     return
 
@@ -164,7 +164,7 @@ def evaluate_sentiment(samples, predictions, mode="Aspect Sentiment"):
     if mode == 'Category Extraction':
         sentiment_types = ["anecdotes/miscellaneous", "price", "food", "ambience", "service"]
     else:
-        sentiment_types = ["positive", "negative", "neutral ", "conflict"]
+        sentiment_types = ["positive", "negative", "neutral", "conflict"]
 
     scores = {sent: {"tp": 0, "fp": 0, "fn": 0} for sent in sentiment_types + ["ALL"]}
     for label, pred in zip(samples, predictions):
@@ -233,7 +233,7 @@ def evaluate_sentiment(samples, predictions, mode="Aspect Sentiment"):
     print(f"\t\t(M avg): precision: {scores['ALL']['Macro_p']:.2f};\trecall: {scores['ALL']['Macro_r']:.2f};\tf1: {scores['ALL']['Macro_f1']:.2f} (Macro)\n")
 
     for sent_type in sentiment_types:
-        print("\t{} -> \tTP: {};\tFP: {};  \tFN: {};  \tprecision: {:.2f};\trecall: {:.2f};\tf1: {:.2f};\t{}".format(
+        print("\t{}  -> \tTP: {};\tFP: {};  \tFN: {};  \tprecision: {:.2f};\trecall: {:.2f};\tf1: {:.2f};\t{}".format(
             sent_type,
             scores[sent_type]["tp"],
             scores[sent_type]["fp"],

@@ -171,7 +171,7 @@ class ABSADataset(Dataset):
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
             mode      : str="tokenize",
-            task      : str="B",
+            task      : str="A",
             tokenizer=None,
             vocab=None
         ):
@@ -261,7 +261,7 @@ class ABSADataset(Dataset):
         data_path : str, 
         bert : bool=False, 
         mode : str="tokenize", 
-        task : str="B"
+        task : str="A"
         ):
         """
         Reads the dataset and analyze words and targets frequencies.
@@ -364,6 +364,7 @@ class ABSADataModule(pl.LightningDataModule):
             dev_path   : str=LAPTOP_DEV,
             batch_size : int=32,
             in_mode    : str="raw",
+            task       : str="A",
             test       : bool=False,
             collate_fn=None,
             tokenizer=None
@@ -373,6 +374,7 @@ class ABSADataModule(pl.LightningDataModule):
         self.dev_path   = dev_path
         self.batch_size = batch_size
         self.in_mode    = in_mode
+        self.task       = task
         self.collate_fn = collate_fn
         self.tokenizer  = tokenizer
 
@@ -386,11 +388,11 @@ class ABSADataModule(pl.LightningDataModule):
         Initialize train and eval datasets from training
         """
         # TODO check if need both dataset together
-        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode, 
+        self.train_dataset = ABSADataset(data_path=self.train_path, mode=self.in_mode, task=self.task, 
                                         tokenizer=self.tokenizer, vocab="bert")
         self.vocabulary = self.train_dataset.vocabulary
 
-        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, 
+        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, task=self.task,
                                         tokenizer=self.tokenizer, vocab=self.vocabulary)
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)

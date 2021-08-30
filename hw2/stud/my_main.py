@@ -15,33 +15,40 @@ from utils_dataset import ABSADataModule, BIO_TAGS, POLARITY_TAGS, \
 from utils_classifier import TaskAModel, TaskATransformerModel, TaskBTransformerModel, \
                         ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms
 
-TASK       = "B"  # A, B, C or D
-TRAIN      = False
+DEVICE     = "cpu"
+TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
-DEVICE = "cpu"
-SAVE_NAME  = f"BERT_t{TASK}_2FFh_gelu_realAcc_eps" # test config name
+TASK       = "A"  # A, B, C or D
+METRICS    = False
+SAVE_NAME  = f"BERT_t{TASK}_2FFh_gelu_eps" # test config name
 
 
 
 #### set model hyper parameters
 hparams = {
-    "embedding_dim" : 768,                 # embedding dimension -> (100 GloVe | 768 BertModel)
-    "cls_hidden_dim": 64,                  # hidden linear layer dim
-    "cls_output_dim": len(POLARITY_TAGS),  # num of BILOU tags to predict
-    "bidirectional" : True,                # if biLSTM or LSTM
-    "lstm_dim"      : 128,                 # LSTM hidden layer dim
+    "embedding_dim" : 768,            # embedding dimension -> (100 GloVe | 768 BertModel)
+    "cls_hidden_dim": 64,             # hidden linear layer dim
+    "cls_output_dim": len(BIO_TAGS) if TASK == "A" else len(POLARITY_TAGS), # num of labels to predict
+    "bidirectional" : True,           # if biLSTM or LSTM
+    "lstm_dim"      : 128,            # LSTM hidden layer dim
     "rnn_layers"    : 1,
     "dropout"       : 0.5
 }
 
 #### Load train and eval data
 print("\n[INFO]: Loading datasets ...")
-#tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
-tokenizer = BertTokenizer.from_pretrained("bert-base-cased") if TASK == "A" else None
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, 
-                            collate_fn=seq_collate_fn, tokenizer=tokenizer)
+if TASK == "A":
+    #tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+    tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+    collate_fn = raw_collate_fn 
+elif TASK == "B":
+    tokenizer = None
+    collate_fn = seq_collate_fn
+
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, task=TASK, 
+                            collate_fn=collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
 hparams["vocab_size"] = len(train_vocab) # vocab length
 
@@ -66,14 +73,14 @@ if TRAIN:
 
     # checkpoint and early stopping callback for pl.Trainer()
     ckpt_clbk = ModelCheckpoint(
-        monitor="val_acc",   # macro_f1 -> taskA
+        monitor="macro_f1",   # macro_f1 -> taskA
         mode="max",
         dirpath="./model/pl_checkpoints/",
         save_last=True,
         save_top_k=3
     )
     early_clbk = EarlyStopping(
-        monitor="val_acc",   # macro_f1 -> taskA
+        monitor="macro_f1",   # macro_f1 -> taskA
         patience=5,
         verbose=True,
         mode="max",
@@ -94,7 +101,7 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "BERT_tB_res2lap_2FFh_gelu3_colab"
+    LOAD_NAME = "basic_allBiLSTM_res2lap_2FF64_BIO"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
@@ -104,15 +111,15 @@ else:
 
 
 #### compute performances -----------------------------
+if METRICS:
+    print("\n[INFO]: precison metrics ...")
+    precisions = precision_metrics(model, eval_dataloader, POLARITY_TAGS)  # BIO_TAGS
+    evaluate_precision(precisions=precisions)
 
-print("\n[INFO]: precison metrics ...")
-precisions = precision_metrics(model, eval_dataloader, POLARITY_TAGS)  # BIO_TAGS
-evaluate_precision(precisions=precisions)
+    #print("\n[INFO]: evaluate extraction  ...")
+    #evaluate_extraction(model, eval_dataloader)
 
-#print("\n[INFO]: evaluate extraction  ...")
-#evaluate_extraction(model, eval_dataloader)
-
-print("\n[INFO]: evaluate sentiment  ...")
-samples = read_json_data(LAPTOP_DEV)
-predictions = predict_taskB(model, samples=samples)
-evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")
+    print("\n[INFO]: evaluate sentiment  ...")
+    samples = read_json_data(LAPTOP_DEV)
+    predictions = predict_taskB(model, samples=samples)
+    evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")

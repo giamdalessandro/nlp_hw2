@@ -147,7 +147,7 @@ def _read_data_taskB(data_path : str="path", test: bool=False, test_samples=None
 
         else:
             polarity = "un-polarized"
-            sent_term.append(text)
+            sent_term.append([text,""])
             pol_labels.append(POLARITY_TAGS[polarity])
             term_list.append("")
 

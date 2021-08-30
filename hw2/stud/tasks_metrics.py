@@ -29,7 +29,7 @@ IDX2LABEL = {
 
 
 ### task predict
-def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV):
+def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
     """
     Perform prediction for task B, step_size element at a time
     """
@@ -41,37 +41,47 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
 
     for step in range(0,len(data_elems), step_size):
         # test step_size samples at a time
-        if step+32 <= len(data_elems):
-            step_pairs = data_elems[step:step+step_size]
+        if step+step_size <= len(data_elems):
+            step_batch = data_elems[step:step+step_size]
         else:
-            step_pairs = data_elems[step:]
+            step_batch = data_elems[step:]
+
+        if verbose: print("batch_size:", len(step_batch))
 
         # use collate_fn to input step_size samples into the model
-        x, y, gt_terms = seq_collate_fn(step_pairs)
+        x, y, gt_terms = seq_collate_fn(step_batch)
         with torch.no_grad():
             # predict with model
             out = model(x)
             logits = out.logits   
             pred_labels = torch.argmax(logits, -1)
 
-            # build (term,aspect) couples to produce correct output for the metrics
-            preds = []
-            prev_text = x[0] if isinstance(x[0], str) else x[0][0]
-            for i in range(len(gt_terms)): 
-                text = x[i] if isinstance(x[i], str) else x[i][0]
-                if prev_text != text: 
-                    # when input text changes we are dealing with another set of targets,
-                    # i.e. another prediction.
-                    predicted.append({"targets":preds})
-                    prev_text = text
-                    preds = []
+        # build (term,aspect) couples to produce correct output for the metrics
+        preds = []
+        for i in range(len(gt_terms)): 
+            text = x[i] if isinstance(x[i], str) else x[i][0]
+            if i != len(gt_terms)-1:
+                next_text = x[i+1] if isinstance(x[i+1], str) else x[i+1][0]
+            
+            if verbose:
+                print("\ntext:", text)
+                print(f"values: term: {gt_terms[i]}, aspect: {label_tags[int(pred_labels[i])]}")
 
-                if gt_terms[i] != "" and int(pred_labels[i]) != 4:   # 4 -> "un-polarized"         
-                    # there is a prediction only if there is a ground truth term 
-                    # and the related polarity.  
-                    preds.append((gt_terms[i],label_tags[int(pred_labels[i])]))
+            if gt_terms[i] != "" and int(pred_labels[i]) != 4:   # 4 -> "un-polarized"         
+                # there is a prediction only if there is a ground truth term 
+                # and the related polarity.  
+                preds.append((gt_terms[i],label_tags[int(pred_labels[i])]))
+                if verbose: print("[LOFFA]:", preds)
 
+            if next_text != text or i == len(gt_terms)-1:
+                # when input text changes we are dealing with another set of targets,
+                # i.e. another prediction.
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"targets":preds})
+                next_text = text
+                preds = []
 
+    print("Num predictions:", len(predicted))
     return predicted
 
 

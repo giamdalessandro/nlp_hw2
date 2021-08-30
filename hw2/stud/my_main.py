@@ -2,9 +2,9 @@ import pytorch_lightning as pl
 pl.seed_everything(42, workers=True)
 
 import torch, gc
-if torch.cuda.is_available():
-  gc.collect()
-  torch.cuda.empty_cache()
+#if torch.cuda.is_available():
+#  gc.collect()
+#  torch.cuda.empty_cache()
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
@@ -40,7 +40,7 @@ hparams = {
 print("\n[INFO]: Loading datasets ...")
 #tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
 tokenizer = BertTokenizer.from_pretrained("bert-base-cased") if TASK == "A" else None
-data_module = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=LAPTOP_DEV, 
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, 
                             collate_fn=seq_collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
 hparams["vocab_size"] = len(train_vocab) # vocab length
@@ -97,13 +97,14 @@ else:
     LOAD_NAME = "BERT_tB_res2lap_2FFh_gelu3_colab"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
-        checkpoint_path=F"model/to_save/{LOAD_NAME}.ckpt",
+        checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
         model=task_model
     )
 
 
 
-#### compute performances
+#### compute performances -----------------------------
+
 print("\n[INFO]: precison metrics ...")
 precisions = precision_metrics(model, eval_dataloader, POLARITY_TAGS)  # BIO_TAGS
 evaluate_precision(precisions=precisions)

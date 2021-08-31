@@ -16,12 +16,12 @@ from utils_classifier import TaskAModel, TaskATransformerModel, TaskBTransformer
                         ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms
 
 DEVICE     = "cpu"
-TRAIN      = True
+TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
 TASK       = "A"  # A, B, C or D
-METRICS    = False
+METRICS    = True
 SAVE_NAME  = f"BERT_t{TASK}_2FFh_gelu_eps" # test config name
 
 
@@ -47,7 +47,7 @@ elif TASK == "B":
     tokenizer = None
     collate_fn = seq_collate_fn
 
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, task=TASK, 
+data_module = ABSADataModule(train_path=LAPTOP_TRAIN, dev_path=RESTAURANT_DEV, task=TASK, 
                             collate_fn=collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
 hparams["vocab_size"] = len(train_vocab) # vocab length
@@ -81,7 +81,7 @@ if TRAIN:
     )
     early_clbk = EarlyStopping(
         monitor="macro_f1",   # macro_f1 -> taskA
-        patience=5,
+        patience=3, #5
         verbose=True,
         mode="max",
         check_on_train_epoch_end=True
@@ -101,7 +101,7 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "BERT_tA_res2lap_2FFh_gelu_eps"
+    LOAD_NAME = "BERT_tA_lap2res_2FFh_gelu_eps"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
@@ -115,8 +115,8 @@ label_dict = BIO_TAGS if TASK == "A" else POLARITY_TAGS
 
 if METRICS:
     print("\n[INFO]: precison metrics ...")
-    precisions = precision_metrics(model, eval_dataloader, label_dict)  # BIO_TAGS
-    evaluate_precision(precisions=precisions)
+    precisions = precision_metrics(model, eval_dataloader, label_dict)
+    evaluate_precision(precisions=precisions, task=TASK)
 
     #print("\n[INFO]: evaluate extraction  ...")
     #evaluate_extraction(model, eval_dataloader)

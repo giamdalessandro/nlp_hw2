@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
-from utils_dataset import _read_data_taskB
+from utils_dataset import _read_data_taskB, _read_data_taskD
 from utils_classifier import seq_collate_fn
 
 POLARITY_INV = {
@@ -19,6 +19,14 @@ POLARITY_INV = {
     3 : "neutral",
     4 : "conflict"
 }
+
+POLARITY_2_INV = {
+	0 : "positive",
+    1 : "negative",
+    2 : "neutral",
+    3 : "conflict"
+}
+
 #    3 : "L",
 IDX2LABEL = {
     0 : "pad",
@@ -31,8 +39,9 @@ IDX2LABEL = {
 ### task predict
 def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
     """
-    Perform prediction for task B, step_size element at a time
+    Perform prediction for task B, step_size element at a time.
     """
+    print("[preds]: predicting on task B ...")
     model.freeze()
     predicted = []  # List[Dict] for output
 
@@ -84,6 +93,61 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
     print("Num predictions:", len(predicted))
     return predicted
 
+def predict_taskD(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_2_INV, verbose=False):
+    """
+    Perform prediction for task D, step_size element at a time.
+    """
+    print("[preds]: predicting on task D ...")
+    model.freeze()
+    predicted = []  # List[Dict] for output
+
+    # pre-processing data
+    data_elems = _read_data_taskD(test=True, test_samples=samples)
+    for step in range(0,len(data_elems), step_size):
+        # test step_size samples at a time
+        if step+step_size <= len(data_elems):
+            step_batch = data_elems[step:step+step_size]
+        else:
+            step_batch = data_elems[step:]
+
+        if verbose: print("batch_size:", len(step_batch))
+
+        # use collate_fn to input step_size samples into the model
+        x, y, gt_cats = seq_collate_fn(step_batch)
+        with torch.no_grad():
+            # predict with model
+            out = model(x)
+            logits = out.logits   
+            pred_labels = torch.argmax(logits, -1)
+
+        # build (term,aspect) couples to produce correct output for the metrics
+        preds = []
+        for i in range(len(gt_cats)): 
+            text = x[i] if isinstance(x[i], str) else x[i][0]
+            if i != len(gt_cats)-1:
+                next_text = x[i+1] if isinstance(x[i+1], str) else x[i+1][0]
+            
+            if verbose:
+                print("\ntext:", text)
+                print(f"values: term: {gt_cats[i]}, aspect: {label_tags[int(pred_labels[i])]}")
+
+            if gt_cats[i] != "" and int(pred_labels[i]) != 4:   # 4 -> "un-polarized"         
+                # there is a prediction only if there is a ground truth term 
+                # and the related polarity.  
+                preds.append((gt_cats[i],label_tags[int(pred_labels[i])]))
+                if verbose: print("[LOFFA]:", preds)
+
+            if next_text != text or i == len(gt_cats)-1:
+                # when input text changes we are dealing with another set of targets,
+                # i.e. another prediction.
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"categories":preds})
+                next_text = text
+                preds = []
+
+    print("Num predictions:", len(predicted))
+    return predicted
+
 
 ### metrics
 def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_vocab):
@@ -96,7 +160,7 @@ def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_
         outputs = model(indexed_in)
         predictions = torch.argmax(outputs.logits, -1).view(-1)
         labels = indexed_labels.view(-1)
-        valid_indices = labels != 0   # 0 -> dummy label or padding label
+        valid_indices = labels != 9   # 0 -> dummy label or padding label
         
         valid_predictions = predictions[valid_indices]
         valid_labels = labels[valid_indices]
@@ -125,7 +189,7 @@ def evaluate_precision(precisions: dict, task: str="A"):
     print("\tlabel \t\tscore")
     for idx_class, precision in sorted(enumerate(per_class_precision), key=lambda elem: -elem[1]):
         label = label_d[idx_class]
-        print(f"\t{label} \t{precision:.4f}")
+        print(f"\t{label}\t\t{precision:.4f}")
 
     return
 
@@ -174,7 +238,7 @@ def evaluate_sentiment(samples, predictions, mode="Aspect Sentiment"):
                 pred_sent = {(term_pred[0], term_pred[1]) for term_pred in pred["targets"] if term_pred[1] == sentiment}
                 gt_sent = {(term_pred[1], term_pred[2]) for term_pred in label["targets"] if term_pred[2] == sentiment}
 
-            elif mode == 'Category Extraction' and "categories" in label:
+            elif mode == "Category Extraction" and "categories" in label:
                 pred_sent = {(term_pred[0]) for term_pred in pred["categories"] if term_pred[0] == sentiment}
                 gt_sent = {(term_pred[0]) for term_pred in label["categories"] if term_pred[0] == sentiment}
 

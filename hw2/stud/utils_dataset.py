@@ -26,6 +26,13 @@ BIO_TAGS = {
     "O"  : 3
 }
 
+CATEGORY_TAGS = {
+    "anecdotes/miscellaneous" : 0,
+    "price"                   : 1,
+    "food"                    : 2,
+    "ambience"                : 3 
+}
+
 POLARITY_TAGS = {
     "un-polarized" : 0,
     "positive"     : 1,
@@ -34,8 +41,15 @@ POLARITY_TAGS = {
     "conflict"     : 4,
 }
 
+POLARITY_2_TAGS = {
+    "positive"     : 0,
+    "negative"     : 1,
+    "neutral"      : 2,
+    "conflict"     : 3
+}
+
 ### utils
-def read_json_data(data_path : str):
+def read_json_data(data_path: str):
     """ Load dataset from JSON file to Dict."""
     f = open(data_path, "r")
     return json.load(f)
@@ -60,7 +74,7 @@ def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     # return a tensor of size [vocab_size, emb_dim]
     return torch.stack(pretrained, dim=0)
 
-def _read_data_taskA(data_path : str, tokenizer, bert: bool=False, mode: str="tokenize", tagger=None):
+def _read_data_taskA(data_path: str, tokenizer, bert: bool=False, mode: str="tokenize", tagger=None):
     """
     Reads the dataset and analyze words and targets frequencies.
     """
@@ -120,7 +134,7 @@ def _read_data_taskA(data_path : str, tokenizer, bert: bool=False, mode: str="to
 
     return sentences, labels, targets_list, word_counter
 
-def _read_data_taskB(data_path : str="path", test: bool=False, test_samples=None):
+def _read_data_taskB(data_path: str="path", test: bool=False, test_samples=None):
     """
     Reads the dataset and analyze words and targets frequencies.
     """
@@ -161,7 +175,7 @@ def _read_data_taskB(data_path : str="path", test: bool=False, test_samples=None
     else:
         return list(zip(sentences,labels,targets_list))
 
-def _read_data_taskD(data_path : str="path", test: bool=False, test_samples=None):
+def _read_data_taskD(data_path: str="path", test: bool=False, test_samples=None):
     """
     Reads the dataset and analyze words and targets frequencies.
     """
@@ -177,20 +191,13 @@ def _read_data_taskD(data_path : str="path", test: bool=False, test_samples=None
         sent_cats  = []
         pol_labels = []
         cats_list  = []
-        #if len(categories) > 0:
         for cat in categories:
-            category = cat[1]
-            polarity = cat[2]
+            category = cat[0]
+            polarity = cat[1]
 
             sent_cats.append([text,cat])
-            pol_labels.append(POLARITY_TAGS[polarity])
+            pol_labels.append(POLARITY_2_TAGS[polarity])
             cats_list.append(category)
-
-        #else:
-        #    polarity = "un-polarized"
-        #    sent_cats.append([text,""])
-        #    pol_labels.append(POLARITY_TAGS[polarity])
-        #    cats_list.append("")
 
         sentences.append(sent_cats)
         labels.append(pol_labels)

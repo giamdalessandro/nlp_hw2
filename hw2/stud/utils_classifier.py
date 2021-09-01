@@ -115,6 +115,7 @@ def seq_collate_fn(data_elements: list):
 
 
 ### Task specific models
+## task A,B
 class TaskAModel(nn.Module):
     """
     Torch nn.Module to perform task A (aspect term extraction).
@@ -154,7 +155,7 @@ class TaskAModel(nn.Module):
         output = self.output(hidden)
         return output
 
-class TaskATransformerModel(nn.Module):
+class TaskATermExtracrionModel(nn.Module):
     """
     Torch nn.Module to perform task A (aspect term extraction) with the help of a tranformer.
     """
@@ -190,7 +191,7 @@ class TaskATransformerModel(nn.Module):
         output = self.transfModel(**tokens, labels=y)
         return output
 
-class TaskBTransformerModel(nn.Module):
+class TaskBAspectSentimentModel(nn.Module):
     """
     Torch nn.Module to perform task B (aspect sentiment classification) with the help of a tranformer.
     """
@@ -227,7 +228,8 @@ class TaskBTransformerModel(nn.Module):
         output = self.transfModel(**tokens, labels=y)
         return output
 
-class TaskDTransformerModel(nn.Module):
+## task C,D
+class TaskCCategoryExtractionModel(nn.Module):
     """
     Torch nn.Module to perform task D (aspect sentiment classification) with the help of a tranformer.
     """
@@ -244,7 +246,45 @@ class TaskDTransformerModel(nn.Module):
         )
         # custom classifier head
         classifier_head = nn.Sequential(
-            nn.Dropout(hparams["dropout"]),
+            ## nn.Dropout(hparams["dropout"]),
+            nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
+            nn.GELU(), #nn.ReLU
+            #nn.Dropout(hparams["dropout"]),
+            nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
+        )
+        self.transfModel.classifier = classifier_head
+        self.transfModel.dropout = nn.Dropout(hparams["dropout"])
+
+    def forward(self, x, y=None, test: bool=False):
+        tokens = self.tokenizer([x[i][0] for i in range(len(x))], [x[i][1] for i in range(len(x))], 
+                                return_tensors='pt', padding=True, truncation=True)
+        if self.device == "cuda":
+            for k, v in tokens.items():
+                if not test:   
+                    tokens[k] = v.cuda()
+
+        y = None if (y is None or test) else y.long()
+        output = self.transfModel(**tokens, labels=y)
+        return output
+
+class TaskDCategorySentimentModel(nn.Module):
+    """
+    Torch nn.Module to perform task D (aspect sentiment classification) with the help of a tranformer.
+    """
+    def __init__(self, hparams: dict, device: str="cpu"):
+        super().__init__()
+        self.device  = device
+        self.hparams = hparams
+        print_hparams(hparams)
+
+        self.tokenizer   = BertTokenizer.from_pretrained("bert-base-cased")
+        self.transfModel = BertForSequenceClassification.from_pretrained(
+            "bert-base-cased",
+            num_labels=hparams["cls_output_dim"]
+        )
+        # custom classifier head
+        classifier_head = nn.Sequential(
+            ## nn.Dropout(hparams["dropout"]),
             nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
             nn.GELU(), #nn.ReLU
             #nn.Dropout(hparams["dropout"]),
@@ -353,7 +393,7 @@ class ABSALightningModule(pl.LightningModule):
         return val_loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=3e-5, eps=1e-8)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=3e-5, eps=1e-8)
         return optimizer
 
     def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):

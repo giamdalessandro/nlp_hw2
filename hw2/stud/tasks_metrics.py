@@ -74,9 +74,9 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
             
             if verbose:
                 print("\ntext:", text)
-                print(f"values: term: {gt_terms[i]}, aspect: {label_tags[int(pred_labels[i])]}")
+                print(f"values: term: {gt_terms[i]}, pred aspect: {label_tags[int(pred_labels[i])]}")
 
-            if gt_terms[i] != "" and int(pred_labels[i]) != 4:   # 4 -> "un-polarized"         
+            if gt_terms[i] != "":   # 0 -> "un-polarized"         
                 # there is a prediction only if there is a ground truth term 
                 # and the related polarity.  
                 preds.append((gt_terms[i],label_tags[int(pred_labels[i])]))
@@ -113,7 +113,7 @@ def predict_taskD(model, samples: List[Dict], step_size: int=32, label_tags: Dic
         if verbose: print("batch_size:", len(step_batch))
 
         # use collate_fn to input step_size samples into the model
-        x, y, gt_cats = seq_collate_fn(step_batch)
+        x, _, gt_cats = seq_collate_fn(step_batch)
         with torch.no_grad():
             # predict with model
             out = model(x)
@@ -123,19 +123,19 @@ def predict_taskD(model, samples: List[Dict], step_size: int=32, label_tags: Dic
         # build (term,aspect) couples to produce correct output for the metrics
         preds = []
         for i in range(len(gt_cats)): 
-            text = x[i] if isinstance(x[i], str) else x[i][0]
+            # for each elem in collate batch
+            text = x[i][0]
             if i != len(gt_cats)-1:
-                next_text = x[i+1] if isinstance(x[i+1], str) else x[i+1][0]
+                next_text = x[i+1][0]
             
             if verbose:
                 print("\ntext:", text)
-                print(f"values: term: {gt_cats[i]}, aspect: {label_tags[int(pred_labels[i])]}")
+                print(f"values: term: {gt_cats[i]}, pred sent: {label_tags[int(pred_labels[i])]}")
 
-            if gt_cats[i] != "" and int(pred_labels[i]) != 4:   # 4 -> "un-polarized"         
-                # there is a prediction only if there is a ground truth term 
-                # and the related polarity.  
-                preds.append((gt_cats[i],label_tags[int(pred_labels[i])]))
-                if verbose: print("[LOFFA]:", preds)
+            # there is a prediction only if there is a ground truth term 
+            # and the related polarity.  
+            preds.append((gt_cats[i],label_tags[int(pred_labels[i])]))
+            if verbose: print("[LOFFA]:", preds)
 
             if next_text != text or i == len(gt_cats)-1:
                 # when input text changes we are dealing with another set of targets,
@@ -180,7 +180,13 @@ def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_
             "per_class_precision":per_class_precision}
 
 def evaluate_precision(precisions: dict, task: str="A"):
-    label_d = IDX2LABEL if task == "A" else POLARITY_INV
+    if task == "A":
+        label_d = IDX2LABEL
+    elif task == "B":
+        label_d = POLARITY_INV 
+    elif task == "D":
+        label_d = POLARITY_2_INV
+        
     per_class_precision = precisions["per_class_precision"]
     print(f"Micro Precision: {precisions['micro_precision']}")
     print(f"Macro Precision: {precisions['macro_precision']}")

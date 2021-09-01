@@ -13,10 +13,10 @@ from tasks_metrics import *
 from utils_dataset import ABSADataModule, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, read_json_data
 from utils_classifier import ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms, \
-                        TaskAModel, TaskATransformerModel, TaskBTransformerModel, TaskDTransformerModel
+                        TaskAModel, TaskATermExtracrionModel, TaskBAspectSentimentModel, TaskDCategorySentimentModel
 
 DEVICE     = "cpu"
-TRAIN      = False
+TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
@@ -31,20 +31,20 @@ if TASK == "A":
 elif TASK == "B":
     num_classes = len(POLARITY_TAGS) 
 elif TASK == "C":
-    num_classes = len(BIO_TAGS)
+    num_classes = None
 elif TASK == "D":
     # no need for dummy "un-polarized" label
     num_classes = len(POLARITY_2_TAGS)
 
 hparams = {
     "task"          : TASK,
-    "embedding_dim" : 768,          # embedding dimension -> (100 GloVe | 768 BertModel)
-    "cls_hidden_dim": 64,           # hidden linear layer dim
-    "cls_output_dim": num_classes,  # num of labels to predict
-    "bidirectional" : True,         # if biLSTM or LSTM
-    "lstm_dim"      : 128,          # LSTM hidden layer dim
-    "rnn_layers"    : 1,
-    "dropout"       : 0.3
+    "embedding_dim" : 768,           # embedding dimension -> (100 GloVe | 768 BertModel)
+    "cls_hidden_dim": 64,            # hidden linear layer dim
+    "cls_output_dim": num_classes,   # num of labels to predict
+    #"bidirectional" : True,         # if biLSTM or LSTM
+    #"lstm_dim"      : 128,          # LSTM hidden layer dim
+    #"rnn_layers"    : 1,
+    "dropout"       : 0.2
 }
 
 #### Load train and eval data
@@ -70,13 +70,13 @@ print("\n[INFO]: Building model ...")
 # instanciate task-specific model
 if TASK == "A":
     #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
-    task_model = TaskATransformerModel(hparams=hparams, tokenizer=tokenizer, device=DEVICE)
+    task_model = TaskATermExtracrionModel(hparams=hparams, tokenizer=tokenizer, device=DEVICE)
 
 elif TASK == "B":
-    task_model = TaskBTransformerModel(hparams=hparams, device=DEVICE)
+    task_model = TaskBAspectSentimentModel(hparams=hparams, device=DEVICE)
 
 elif TASK == "D":
-    task_model = TaskDTransformerModel(hparams=hparams, device=DEVICE)
+    task_model = TaskDCategorySentimentModel(hparams=hparams, device=DEVICE)
     
 
 if TRAIN:
@@ -114,7 +114,7 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "BERT_tD_res2res_2FFh_gelu_eps_drop"
+    LOAD_NAME = "BERT_tD_res2res_2FFh_gelu3_dog_f1"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
@@ -147,6 +147,7 @@ if METRICS:
         evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")
 
     elif TASK == "C":
+        # TODO
         predictions = predict_taskD(model, samples=samples)
         evaluate_sentiment(samples, predictions, mode="Category Extraction")
 

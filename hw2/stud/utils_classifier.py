@@ -1,4 +1,5 @@
 import torch
+from torch._C import CallStack
 import torchmetrics
 from torch import nn
 
@@ -57,6 +58,7 @@ def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
     #print("vectors out:", vectors.size())
     return vectors
 
+
 ### RNNs collate functions
 def rnn_collate_fn(data_elements: list):
     """
@@ -91,10 +93,24 @@ def raw_collate_fn(data_elements: list):
         X.append(elem[0])
         y.append(torch.Tensor(elem[1]))
 
-    y = torch.stack(y) # torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    #print("y:", y.size())
-    #print("X:", len(X))
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
     return X, y, None
+
+def cat_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
+    """
+    X = []
+    y = []
+    cats = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(torch.Tensor(elem[1]))
+        cats.append(elem[2])
+
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, y, cats
 
 def seq_collate_fn(data_elements: list):
     """
@@ -113,6 +129,28 @@ def seq_collate_fn(data_elements: list):
 
     y = torch.Tensor(y)
     return X, y, terms
+
+class CustomRobertaClassificationHead(nn.Module):
+    """
+    Override of `RobertaClassificationHead` module to customize 
+    classification head for sentence-level classification tasks.
+    """
+    def __init__(self, hparams: dict):
+        super().__init__()
+        self.activation = nn.Tanh() # nn.GELU()
+        self.dense      = nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"])
+        self.dropout    = nn.Dropout(hparams["dropout"])
+        self.out_proj   = nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"])
+
+    def forward(self, features, **kwargs):
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = self.activation(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
 
 
 ### Task specific models
@@ -247,13 +285,7 @@ class TaskCCategoryExtractionModel(nn.Module):
             problem_type="multi_label_classification"
         )
         # custom classifier head
-        #classifier_head = nn.Sequential(
-        #    nn.Dropout(hparams["dropout"]),
-        #    nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
-        #    nn.GELU(), #nn.ReLU
-        #    nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
-        #)
-        #self.transfModel.classifier = classifier_head
+        self.transfModel.classifier = CustomRobertaClassificationHead(hparams)
         self.transfModel.dropout = nn.Dropout(hparams["dropout"])
 
     def forward(self, x, y=None, test: bool=False):

@@ -10,18 +10,21 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
 
 from tasks_metrics import *
-from utils_dataset import CATEGORY_TAGS, ABSADataModule, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
-                        LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, read_json_data
-from utils_classifier import ABSALightningModule, TaskCCategoryExtractionModel, seq_collate_fn,  raw_collate_fn, get_preds_terms, \
-                        TaskAModel, TaskATermExtracrionModel, TaskBAspectSentimentModel, TaskDCategorySentimentModel
+from utils_dataset import CATEGORY_TAGS, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
+                        LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, \
+                        ABSADataModule, read_json_data
+from utils_classifier import ABSALightningModule, TaskCCategoryExtractionModel, \
+                        seq_collate_fn,  raw_collate_fn, get_preds_terms, cat_collate_fn, \
+                        TaskAModel, TaskATermExtracrionModel, TaskBAspectSentimentModel, \
+                        TaskDCategorySentimentModel
 
 DEVICE     = "cpu"
-TRAIN      = True
+TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
 TASK       = "C"  # A, B, C or D
-METRICS    = False
+METRICS    = True
 SAVE_NAME  = f"RoBERTa_t{TASK}_2FFh_gelu_eps" # test config name
 
 
@@ -56,7 +59,7 @@ if TASK == "A":
 else:
     tokenizer = None
     if TASK == "C":
-        collate_fn = raw_collate_fn
+        collate_fn = cat_collate_fn
     elif TASK == "B" or TASK == "D":
         collate_fn = seq_collate_fn
 
@@ -74,13 +77,10 @@ print("\n[INFO]: Building model ...")
 if TASK == "A":
     #task_model = TaskAModel(hparams=hparams, embeddings=train_vocab.vectors.float())
     task_model = TaskATermExtracrionModel(hparams=hparams, tokenizer=tokenizer, device=DEVICE)
-
 elif TASK == "B":
     task_model = TaskBAspectSentimentModel(hparams=hparams, device=DEVICE)
-
 elif TASK == "C":
     task_model = TaskCCategoryExtractionModel(hparams=hparams, device=DEVICE)
-
 elif TASK == "D":
     task_model = TaskDCategorySentimentModel(hparams=hparams, device=DEVICE)
     
@@ -120,7 +120,7 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "BERT_tD_res2res_2FFh_gelu3_dog_f1"
+    LOAD_NAME = "RoBERTa_tC_res2res_2FFh_tanh_real"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
@@ -142,8 +142,9 @@ elif TASK == "D":
 
 if METRICS:
     print("\n[INFO]: precison metrics ...")
-    precisions = precision_metrics(model, eval_dataloader, label_dict)
-    evaluate_precision(precisions=precisions, task=TASK)
+    if TASK != "C":
+        precisions = precision_metrics(model, eval_dataloader, label_dict, task=TASK)
+        evaluate_precision(precisions=precisions, task=TASK)
 
     #print("\n[INFO]: evaluate extraction  ...")
     #evaluate_extraction(model, eval_dataloader)
@@ -156,7 +157,7 @@ if METRICS:
 
     elif TASK == "C":
         # TODO
-        predictions = predict_taskD(model, samples=samples)
+        predictions = predict_taskC(model, samples=samples)
         evaluate_sentiment(samples, predictions, mode="Category Extraction")
 
     elif TASK == "D":

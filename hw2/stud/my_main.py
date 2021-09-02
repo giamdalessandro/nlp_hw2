@@ -10,9 +10,9 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
 
 from tasks_metrics import *
-from utils_dataset import ABSADataModule, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
+from utils_dataset import CATEGORY_TAGS, ABSADataModule, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, read_json_data
-from utils_classifier import ABSALightningModule, seq_collate_fn,  raw_collate_fn, get_preds_terms, \
+from utils_classifier import ABSALightningModule, TaskCCategoryExtractionModel, seq_collate_fn,  raw_collate_fn, get_preds_terms, \
                         TaskAModel, TaskATermExtracrionModel, TaskBAspectSentimentModel, TaskDCategorySentimentModel
 
 DEVICE     = "cpu"
@@ -20,9 +20,9 @@ TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
-TASK       = "D"  # A, B, C or D
-METRICS    = True
-SAVE_NAME  = f"BERT_t{TASK}_2FFh_gelu_eps" # test config name
+TASK       = "C"  # A, B, C or D
+METRICS    = False
+SAVE_NAME  = f"RoBERTa_t{TASK}_2FFh_gelu_eps" # test config name
 
 
 #### set model hyper parameters
@@ -31,7 +31,7 @@ if TASK == "A":
 elif TASK == "B":
     num_classes = len(POLARITY_TAGS) 
 elif TASK == "C":
-    num_classes = None
+    num_classes = len(CATEGORY_TAGS)
 elif TASK == "D":
     # no need for dummy "un-polarized" label
     num_classes = len(POLARITY_2_TAGS)
@@ -53,9 +53,12 @@ if TASK == "A":
     #tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     collate_fn = raw_collate_fn 
-elif TASK == "B" or TASK == "D":
+else:
     tokenizer = None
-    collate_fn = seq_collate_fn
+    if TASK == "C":
+        collate_fn = raw_collate_fn
+    elif TASK == "B" or TASK == "D":
+        collate_fn = seq_collate_fn
 
 data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, task=TASK, 
                             collate_fn=collate_fn, tokenizer=tokenizer)
@@ -74,6 +77,9 @@ if TASK == "A":
 
 elif TASK == "B":
     task_model = TaskBAspectSentimentModel(hparams=hparams, device=DEVICE)
+
+elif TASK == "C":
+    task_model = TaskCCategoryExtractionModel(hparams=hparams, device=DEVICE)
 
 elif TASK == "D":
     task_model = TaskDCategorySentimentModel(hparams=hparams, device=DEVICE)
@@ -128,6 +134,8 @@ if TASK == "A":
     label_dict = BIO_TAGS 
 elif TASK == "B":
     label_dict = POLARITY_TAGS 
+elif TASK == "C":
+    label_dict = CATEGORY_TAGS 
 elif TASK == "D":
     label_dict = POLARITY_2_TAGS 
 

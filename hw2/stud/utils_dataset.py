@@ -30,7 +30,8 @@ CATEGORY_TAGS = {
     "anecdotes/miscellaneous" : 0,
     "price"                   : 1,
     "food"                    : 2,
-    "ambience"                : 3 
+    "ambience"                : 3,
+    "service"                 : 4
 }
 
 POLARITY_TAGS = {
@@ -168,6 +169,39 @@ def _read_data_taskB(data_path: str="path", test: bool=False, test_samples=None)
         sentences.append(sent_term)
         labels.append(pol_labels)
         targets_list.append(term_list)
+
+    assert len(sentences) == len(labels)
+    if not test:
+        return sentences, labels, targets_list, None
+    else:
+        return list(zip(sentences,labels,targets_list))
+
+def _read_data_taskC(data_path: str="path", test: bool=False, test_samples=None, cat2id: dict=CATEGORY_TAGS):
+    """
+    Reads the dataset and analyze words and targets frequencies.
+    """
+    sentences = []
+    labels    = []
+    targets_list = []
+
+    data_dict = read_json_data(data_path) if not test else test_samples
+    for entry in data_dict:
+        text = entry["text"]
+        categories = entry["categories"]
+
+        # sent_cat = []
+        cats_list  = []
+        vec_y = [0 for i in range(len(cat2id))]
+        for cat in categories:
+            category = cat[0]
+            vec_y[cat2id[category]] = 1
+            cats_list.append(category)
+
+        #for cat in cat2id.keys():
+        #    sent_cat.append([text,cat])
+        sentences.append(text)
+        labels.append(vec_y)
+        targets_list.append(cats_list)
 
     assert len(sentences) == len(labels)
     if not test:
@@ -328,7 +362,7 @@ class ABSADataset(Dataset):
             return _read_data_taskB(data_path, test=False)
     
         elif task == "C":
-            return None
+            return _read_data_taskC(data_path, test=False)
 
         elif task == "D":
             return _read_data_taskD(data_path, test=False)

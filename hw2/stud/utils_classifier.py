@@ -3,9 +3,8 @@ import torchmetrics
 from torch import nn
 
 import pytorch_lightning as pl
-from transformers import BertForTokenClassification, BertTokenizer, \
-                    BertModel, BertForSequenceClassification
-from transformers.utils.dummy_pt_objects import DistilBertForSequenceClassification
+from transformers import BertForTokenClassification, BertTokenizer, BertForSequenceClassification, \
+                        RobertaForSequenceClassification, RobertaTokenizer
 
 
 
@@ -92,7 +91,9 @@ def raw_collate_fn(data_elements: list):
         X.append(elem[0])
         y.append(torch.Tensor(elem[1]))
 
-    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    y = torch.stack(y) # torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    #print("y:", y.size())
+    #print("X:", len(X))
     return X, y, None
 
 def seq_collate_fn(data_elements: list):
@@ -231,7 +232,7 @@ class TaskBAspectSentimentModel(nn.Module):
 ## task C,D
 class TaskCCategoryExtractionModel(nn.Module):
     """
-    Torch nn.Module to perform task D (aspect sentiment classification) with the help of a tranformer.
+    Torch nn.Module to perform task C (category extraction) with the help of a tranformer.
     """
     def __init__(self, hparams: dict, device: str="cpu"):
         super().__init__()
@@ -239,37 +240,36 @@ class TaskCCategoryExtractionModel(nn.Module):
         self.hparams = hparams
         print_hparams(hparams)
 
-        self.tokenizer   = BertTokenizer.from_pretrained("bert-base-cased")
-        self.transfModel = BertForSequenceClassification.from_pretrained(
-            "bert-base-cased",
-            num_labels=hparams["cls_output_dim"]
+        self.tokenizer   = RobertaTokenizer.from_pretrained("roberta-base")
+        self.transfModel = RobertaForSequenceClassification.from_pretrained(
+            "roberta-base",
+            num_labels=hparams["cls_output_dim"],
+            problem_type="multi_label_classification"
         )
         # custom classifier head
-        classifier_head = nn.Sequential(
-            ## nn.Dropout(hparams["dropout"]),
-            nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
-            nn.GELU(), #nn.ReLU
-            #nn.Dropout(hparams["dropout"]),
-            nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
-        )
-        self.transfModel.classifier = classifier_head
+        #classifier_head = nn.Sequential(
+        #    nn.Dropout(hparams["dropout"]),
+        #    nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
+        #    nn.GELU(), #nn.ReLU
+        #    nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
+        #)
+        #self.transfModel.classifier = classifier_head
         self.transfModel.dropout = nn.Dropout(hparams["dropout"])
 
     def forward(self, x, y=None, test: bool=False):
-        tokens = self.tokenizer([x[i][0] for i in range(len(x))], [x[i][1] for i in range(len(x))], 
-                                return_tensors='pt', padding=True, truncation=True)
+        tokens = self.tokenizer(x, return_tensors='pt', padding=True, truncation=True)
         if self.device == "cuda":
             for k, v in tokens.items():
                 if not test:   
                     tokens[k] = v.cuda()
 
-        y = None if (y is None or test) else y.long()
+        y = None if (y is None or test) else y.float()
         output = self.transfModel(**tokens, labels=y)
         return output
 
 class TaskDCategorySentimentModel(nn.Module):
     """
-    Torch nn.Module to perform task D (aspect sentiment classification) with the help of a tranformer.
+    Torch nn.Module to perform task D (category sentiment classification) with the help of a tranformer.
     """
     def __init__(self, hparams: dict, device: str="cpu"):
         super().__init__()
@@ -329,19 +329,20 @@ class ABSALightningModule(pl.LightningModule):
             num_classes=num_classes,
             average="micro",
             mdmc_average="global",
-            ignore_index=None if task == "D" else 0
+            ignore_index=None if (task=="D" or task=="C") else 0
         )
         self.macro_f1 = torchmetrics.F1(
             num_classes=num_classes,
             average="macro",
             mdmc_average="global",
-            ignore_index=None if task == "D" else 0
+            ignore_index=None if (task=="D" or task=="C") else 0
         )
 
         # task B metrics
         self.accuracy_fn = torchmetrics.Accuracy(
             num_classes=num_classes,
-            ignore_index=None if task == "D" else 0   # ignore dummy "un-polarized" label
+            ignore_index=None if (task=="D" or task=="C") else 0,   # ignore dummy "un-polarized" label
+            subset_accuracy=True if task=="C" else False
         )
         return
 
@@ -358,8 +359,8 @@ class ABSALightningModule(pl.LightningModule):
 
         # Training accuracy
         logits = output.logits   
-        preds = torch.argmax(logits, -1) 
-        train_acc = self.accuracy_fn(preds, y.int())
+        #preds = torch.argmax(logits, -1) 
+        train_acc = self.accuracy_fn(logits, y.int())
         self.log('train_acc', train_acc, prog_bar=True, on_epoch=True)
 
         # Training loss:
@@ -376,20 +377,20 @@ class ABSALightningModule(pl.LightningModule):
 
         # Validation accuracy
         logits = output.logits
-        preds = torch.argmax(logits, -1)
-        val_acc = self.accuracy_fn(preds, y.int())
+        #preds = torch.argmax(logits, -1)
+        val_acc = self.accuracy_fn(logits, y.int())
         self.log('val_acc', val_acc, prog_bar=True, on_epoch=True)
 
         # Micro-macro F1 scores
-        micro_f1 = self.micro_f1(preds, y.int())
+        micro_f1 = self.micro_f1(logits, y.int())
         self.log('micro_f1', micro_f1, prog_bar=True)
 
-        macro_f1 = self.macro_f1(preds, y.int())
+        macro_f1 = self.macro_f1(logits, y.int())
         self.log('macro_f1', macro_f1, prog_bar=True)
 
         # Validation loss
         val_loss = output.loss
-        self.log('valid_loss', val_loss, prog_bar=True, on_epoch=True)
+        self.log('val_loss', val_loss, prog_bar=True, on_epoch=True)
         return val_loss
 
     def configure_optimizers(self):

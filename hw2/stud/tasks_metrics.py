@@ -27,6 +27,13 @@ POLARITY_2_INV = {
     3 : "conflict"
 }
 
+CATEGORY_INV = {
+    0 : "anecdotes/miscellaneous",
+    1 : "price",
+    2 : "food",
+    3 : "ambience"                
+}
+
 #    3 : "L",
 IDX2LABEL = {
     0 : "pad",

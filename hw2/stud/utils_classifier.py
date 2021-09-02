@@ -137,7 +137,7 @@ class CustomRobertaClassificationHead(nn.Module):
     """
     def __init__(self, hparams: dict):
         super().__init__()
-        self.activation = nn.Tanh() # nn.GELU()
+        self.activation = nn.GELU() # nn.Tanh()
         self.dense      = nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"])
         self.dropout    = nn.Dropout(hparams["dropout"])
         self.out_proj   = nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"])
@@ -315,14 +315,20 @@ class TaskDCategorySentimentModel(nn.Module):
             num_labels=hparams["cls_output_dim"]
         )
         # custom classifier head
-        classifier_head = nn.Sequential(
-            ## nn.Dropout(hparams["dropout"]),
-            nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
-            nn.GELU(), #nn.ReLU
-            #nn.Dropout(hparams["dropout"]),
-            nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
+        self.tokenizer   = RobertaTokenizer.from_pretrained("roberta-base")
+        self.transfModel = RobertaForSequenceClassification.from_pretrained(
+            "roberta-base",
+            num_labels=hparams["cls_output_dim"]
         )
-        self.transfModel.classifier = classifier_head
+        self.transfModel.classifier = CustomRobertaClassificationHead(hparams)
+        #classifier_head = nn.Sequential(
+        #    ## nn.Dropout(hparams["dropout"]),
+        #    nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
+        #    nn.GELU(), #nn.ReLU
+        #    #nn.Dropout(hparams["dropout"]),
+        #    nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
+        #)
+        #self.transfModel.classifier = classifier_head
         self.transfModel.dropout = nn.Dropout(hparams["dropout"])
 
     def forward(self, x, y=None, test: bool=False):
@@ -352,6 +358,7 @@ class ABSALightningModule(pl.LightningModule):
             task = self.model.hparams["task"]
             num_classes = self.model.hparams["cls_output_dim"]
         else:
+            # just to initialize metrics when testing
             task = None
             num_classes = 2
 

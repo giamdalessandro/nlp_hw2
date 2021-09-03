@@ -168,11 +168,11 @@ def _read_data_taskB(data_path: str="path", test: bool=False, test_samples=None)
         if len(targets) > 0:
             for tgt in targets:
                 term = tgt[1]
-                polarity = tgt[2]
-
                 sent_term.append([text,term])
-                pol_labels.append(POLARITY_TAGS[polarity])
                 term_list.append(term)
+
+                polarity = "un-polarized" if test else tgt[2]
+                pol_labels.append(POLARITY_TAGS[polarity])
 
         else:
             polarity = "un-polarized"

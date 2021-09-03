@@ -143,7 +143,6 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
     Perform prediction for task B, step_size element at a time.
     """
     print("[preds]: predicting on task B ...")
-    model.freeze()
     predicted = []  # List[Dict] for output
 
     # pre-processing data
@@ -159,7 +158,7 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
         if verbose: print("batch_size:", len(step_batch))
 
         # use collate_fn to input step_size samples into the model
-        x, y, gt_terms = seq_collate_fn(step_batch)
+        x, _, gt_terms = seq_collate_fn(step_batch)
         with torch.no_grad():
             # predict with model
             out = model(x)
@@ -168,6 +167,7 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
 
         # build (term,aspect) couples to produce correct output for the metrics
         preds = []
+        next_text = ""
         for i in range(len(gt_terms)): 
             text = x[i] if isinstance(x[i], str) else x[i][0]
             if i != len(gt_terms)-1:
@@ -510,6 +510,7 @@ class ABSALightningModule(pl.LightningModule):
         return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 
     def predict(self, samples: List[Dict]):
+        self.freeze()
         return self.model.predict(samples)
 
 

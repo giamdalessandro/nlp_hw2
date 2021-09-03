@@ -1,62 +1,21 @@
 import torch
-from torch._C import CallStack
 import torchmetrics
 from torch import nn
+
+from typing import List, Dict
+from utils_general import *
 
 import pytorch_lightning as pl
 from transformers import BertForTokenClassification, BertTokenizer, BertForSequenceClassification, \
                         RobertaForSequenceClassification, RobertaTokenizer
 
-
-
-### utils functions
-def print_hparams(hparam: dict):
-    print("\n[model]: hyperparameters ...")
-    for k, v in hparam.items():
-        print(f"{k}:\t{v}")
-    print()
-
-def get_preds_terms(preds, tokens):
-    """
-    Extract predicted aspect terms from predicted tags sequence (batch-wise).
-    """
-    #print("\npreds:",preds.size())
-    #print("tokens:", len(tokens))
-    pred_terms = []
-    for b in range(len(preds)):
-        #print("preds:", preds[b])
-        for p in range(len(tokens[b])): # len(tokens)
-            if preds[b][p] != 0 and preds[b][p] != 4:
-                pred_terms.append(tokens[b][p])
-
-    return pred_terms
-
-def get_label_tokens(targets: dict, tokenizer):
-    """
-    Commento sbagliato come un negroni, ma senza negroni.
-    """
-    for tgt in targets:
-        if len(tgt[1]) > 0:
-            tokenizer.tokenize(tgt[1])
-
-    return
-
-def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
-    # useless if not averaging rnn output
-    clean_batch = []
-    last_idxs = lenghts - 1
-    rnn_out = rnn_out[0]
-    print("rnn out size:", rnn_out.size())
-    batch_size = rnn_out.size(0)
-
-    for i in range(batch_size):
-        words_output = torch.split(rnn_out[i], last_idxs[i])[0]
-        #print("words out:", words_output.size())
-        clean_batch.append(words_output)
-        
-    vectors = clean_batch # torch.stack(clean_batch)
-    #print("vectors out:", vectors.size())
-    return vectors
+POLARITY_INV = {
+	0 : "un-polarized",   # dummy label for sentences with no target
+    1 : "positive",
+    2 : "negative",
+    3 : "neutral",
+    4 : "conflict"
+}
 
 
 ### RNNs collate functions
@@ -85,7 +44,8 @@ def rnn_collate_fn(data_elements: list):
 def raw_collate_fn(data_elements: list):
     """
     Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
+    index sequences. (data_elements is a list of (x, y, toks) tuples, where `x` is raw input text, 
+    `y` the ground truth label and `toks` the tokenized input)
     """
     X = []
     y = []
@@ -95,6 +55,25 @@ def raw_collate_fn(data_elements: list):
 
     y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
     return X, y, None
+
+def raw2_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y, toks) tuples, where `x` is raw input text, 
+    `y` the ground truth label and `toks` the tokenized input)
+    """
+    X = []
+    y = []
+    toks  = []
+    terms = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(torch.Tensor(elem[1]))
+        terms.append(elem[2])
+        toks.append(elem[3])
+
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, y, terms, toks
 
 def cat_collate_fn(data_elements: list):
     """
@@ -150,6 +129,64 @@ class CustomRobertaClassificationHead(nn.Module):
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
+
+
+## predict utils
+def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
+    """
+    Perform prediction for task B, step_size element at a time.
+    """
+    print("[preds]: predicting on task B ...")
+    model.freeze()
+    predicted = []  # List[Dict] for output
+
+    # pre-processing data
+    data_elems = _read_data_taskB(test=True, test_samples=samples)
+
+    for step in range(0,len(data_elems), step_size):
+        # test step_size samples at a time
+        if step+step_size <= len(data_elems):
+            step_batch = data_elems[step:step+step_size]
+        else:
+            step_batch = data_elems[step:]
+
+        if verbose: print("batch_size:", len(step_batch))
+
+        # use collate_fn to input step_size samples into the model
+        x, y, gt_terms = seq_collate_fn(step_batch)
+        with torch.no_grad():
+            # predict with model
+            out = model(x)
+            logits = out.logits   
+            pred_labels = torch.argmax(logits, -1)
+
+        # build (term,aspect) couples to produce correct output for the metrics
+        preds = []
+        for i in range(len(gt_terms)): 
+            text = x[i] if isinstance(x[i], str) else x[i][0]
+            if i != len(gt_terms)-1:
+                next_text = x[i+1] if isinstance(x[i+1], str) else x[i+1][0]
+            
+            if verbose:
+                print("\ntext:", text)
+                print(f"values: term: {gt_terms[i]}, pred aspect: {label_tags[int(pred_labels[i])]}")
+
+            if gt_terms[i] != "":   # 0 -> "un-polarized"         
+                # there is a prediction only if there is a ground truth term 
+                # and the related polarity.  
+                preds.append((gt_terms[i],label_tags[int(pred_labels[i])]))
+                if verbose: print("[LOFFA]:", preds)
+
+            if next_text != text or i == len(gt_terms)-1:
+                # when input text changes we are dealing with another set of targets,
+                # i.e. another prediction.
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"targets":preds})
+                next_text = text
+                preds = []
+
+    print("Num predictions:", len(predicted))
+    return predicted
 
 
 
@@ -267,7 +304,10 @@ class TaskBAspectSentimentModel(nn.Module):
         output = self.transfModel(**tokens, labels=y)
         return output
 
-class taskABModel(nn.Module):
+    def predict(self, samples: List[Dict]):
+        return predict_taskB(self, samples=samples)
+
+class TaskABModel(nn.Module):
     def __init__(self, hparams: dict, device: str="cpu"):
         super().__init__()
         self.device  = device
@@ -333,18 +373,11 @@ class TaskDCategorySentimentModel(nn.Module):
         self.hparams = hparams
         print_hparams(hparams)
 
-        self.tokenizer   = BertTokenizer.from_pretrained("bert-base-cased")
-        self.transfModel = BertForSequenceClassification.from_pretrained(
-            "bert-base-cased",
-            num_labels=hparams["cls_output_dim"]
-        )
-        # custom classifier head
-        self.tokenizer   = RobertaTokenizer.from_pretrained("roberta-base")
-        self.transfModel = RobertaForSequenceClassification.from_pretrained(
-            "roberta-base",
-            num_labels=hparams["cls_output_dim"]
-        )
-        self.transfModel.classifier = CustomRobertaClassificationHead(hparams)
+        #self.tokenizer   = BertTokenizer.from_pretrained("bert-base-cased")
+        #self.transfModel = BertForSequenceClassification.from_pretrained(
+        #    "bert-base-cased",
+        #    num_labels=hparams["cls_output_dim"]
+        #)
         #classifier_head = nn.Sequential(
         #    ## nn.Dropout(hparams["dropout"]),
         #    nn.Linear(hparams["embedding_dim"], hparams["cls_hidden_dim"]),
@@ -353,6 +386,13 @@ class TaskDCategorySentimentModel(nn.Module):
         #    nn.Linear(hparams["cls_hidden_dim"], hparams["cls_output_dim"]),
         #)
         #self.transfModel.classifier = classifier_head
+        # custom classifier head
+        self.tokenizer   = RobertaTokenizer.from_pretrained("roberta-base")
+        self.transfModel = RobertaForSequenceClassification.from_pretrained(
+            "roberta-base",
+            num_labels=hparams["cls_output_dim"]
+        )
+        self.transfModel.classifier = CustomRobertaClassificationHead(hparams)
         self.transfModel.dropout = nn.Dropout(hparams["dropout"])
 
     def forward(self, x, y=None, test: bool=False):
@@ -422,7 +462,7 @@ class ABSALightningModule(pl.LightningModule):
 
         # Training accuracy
         logits = output.logits   
-        #preds = torch.argmax(logits, -1) 
+        logits = torch.argmax(logits, -1) 
         train_acc = self.accuracy_fn(logits, y.int())
         self.log('train_acc', train_acc, prog_bar=True, on_epoch=True)
 
@@ -440,7 +480,7 @@ class ABSALightningModule(pl.LightningModule):
 
         # Validation accuracy
         logits = output.logits
-        #preds = torch.argmax(logits, -1)
+        logits = torch.argmax(logits, -1)
         val_acc = self.accuracy_fn(logits, y.int())
         self.log('val_acc', val_acc, prog_bar=True, on_epoch=True)
 

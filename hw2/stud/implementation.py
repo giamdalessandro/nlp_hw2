@@ -4,6 +4,12 @@ from typing import List, Tuple, Dict
 from model import Model
 import random
 
+## student imports
+import torch
+from stud.utils_dataset import 
+from stud.utils_classifier import TaskBAspectSentimentModel
+
+
 def build_model_b(device: str) -> Model:
     """
     The implementation of this function is MANDATORY.
@@ -13,7 +19,14 @@ def build_model_b(device: str) -> Model:
         A Model instance that implements aspect sentiment analysis of the ABSA pipeline.
             b: Aspect sentiment analysis.
     """
-    return RandomBaseline()
+    hparams = {
+        "task"          : "B",
+        "embedding_dim" : 768,   # embedding dimension -> (100 GloVe | 768 BertModel)
+        "cls_hidden_dim": 64,    # hidden linear layer dim
+        "cls_output_dim": 5,     # num of labels to predict
+        "dropout"       : 0.2
+    }
+    return TaskBAspectSentimentModel(hparams=hparams, device=device) #RandomBaseline()
 
 def build_model_ab(device: str) -> Model:
     """
@@ -189,4 +202,14 @@ class StudentModel(Model):
                         }
                     ]
         '''
-        pass
+        preds = []
+        for sample in samples:
+            pred_sample = {}
+            words = None
+            if self.mode == 'ab':
+
+            if self.mode == 'b':
+
+            if self.mode == 'cd':
+
+        return preds

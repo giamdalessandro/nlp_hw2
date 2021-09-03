@@ -91,15 +91,16 @@ def _read_data_taskA(data_path: str, tokenizer,
     tok_list  = []
     words_list   = []
     targets_list = []
+    target_final = []
 
-    data_dict = read_json_data(data_path) if not test else test_samples
+    data_dict = read_json_data(data_path)# if not test else test_samples
     for entry in data_dict:
         t_list = []
         # tokenize data sentences
         if bert:
             tokens = tokenizer.tokenize(entry["text"])
-            tokens.insert(0, "<s>")  # RoBERTa "<s>" <-> BERT "[CLS]" 
-            tokens.append("</s>")    # RoBERTa "</s>" <-> BERT "[SEP]"
+            tokens.insert(0, "[CLS]")  # RoBERTa "<s>" <-> BERT "[CLS]" 
+            tokens.append("[SEP]")     # RoBERTa "</s>" <-> BERT "[SEP]"
         else:
             tokens = tokenizer(entry["text"])
         words_list.extend(tokens)
@@ -107,10 +108,12 @@ def _read_data_taskA(data_path: str, tokenizer,
 
         # count target words
         targets = entry["targets"]
+        tgt_list = []
         if len(targets) > 0:
             t_list.append(targets)
             for tgt in targets:
                 targets_list.append(tgt[1])
+                tgt_list.append(tgt[1])
         else:
             t_list.append([])
 
@@ -119,6 +122,7 @@ def _read_data_taskA(data_path: str, tokenizer,
         tags = tagger(targets, tokens, bert_tokenizer=b_tok)
         #print(tags)
         labels.append(tags)
+        target_final.append(tgt_list)
         
         if mode == "tokenize":
             sentences.append(tokens)
@@ -143,7 +147,7 @@ def _read_data_taskA(data_path: str, tokenizer,
     if not test:
         return sentences, labels, targets_list, word_counter
     else:
-        return list(zip(sentences,labels,tok_list))
+        return sentences, labels, target_final, tok_list
 
 def _read_data_taskB(data_path: str="path", test: bool=False, test_samples=None):
     """
@@ -264,13 +268,15 @@ class ABSADataset(Dataset):
             pad_token : str="<PAD>",
             mode      : str="tokenize",
             task      : str="A",
+            test      : bool=False,
             tokenizer=None,
             vocab=None
         ):
         self.data_path = data_path
+        self.test = test
         self.task = task
         self.bert_tokenizer = tokenizer
-        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, mode=mode, vocab=vocab)
+        self._build_vocab(data_path, unk_token=unk_token, pad_token=pad_token, mode=mode, vocab=vocab, test=test)
 
     def _tokenize_line(self, line: str, pattern='\W'):
         """
@@ -366,7 +372,7 @@ class ABSADataset(Dataset):
         print(f"[dataset]: performing task '{task}' preprocessing ...")
         if task == "A":
             tokenizer = self._tokenize_line if mode == "tokenize" else self.bert_tokenizer
-            return _read_data_taskA(data_path, tokenizer, bert, mode, tagger=self._tag_tokens)
+            return _read_data_taskA(data_path, tokenizer, bert, mode, tagger=self._tag_tokens, test=self.test)
 
         elif task == "B":
             return _read_data_taskB(data_path, test=False)
@@ -383,6 +389,7 @@ class ABSADataset(Dataset):
             unk_token : str="<UNK>", 
             pad_token : str="<PAD>",
             mode : str="tokenize",
+            test : bool=False,
             vocab=None
         ):
         """
@@ -439,9 +446,12 @@ class ABSADataset(Dataset):
 
         elif mode == "raw":
             # use raw text as input (required by transformers)
-            for s, l, tgt in zip(sentences,labels,targets_list):
-                self.samples.append((s,l,tgt))
-        
+            if not test:
+                for s, l, tgt in zip(sentences,labels,targets_list):
+                    self.samples.append((s,l,tgt))
+            else:
+                for s, l, tgt, tok in zip(sentences,labels,targets_list, word_counter):
+                    self.samples.append((s,l,tgt,tok))
         return
 
     def __len__(self):
@@ -495,11 +505,14 @@ class ABSADataModule(pl.LightningDataModule):
         #self.train_restaurant = ABSADataset(data_path=RESTAURANT_TRAIN)
         #self.eval_restaurant  = ABSADataset(data_path=RESTAURANT_DEV)
 
-    def test_setup(self, test_data: list):
+    def test_setup(self, test_data: list=None):
         """
         Initialize test data for testing.
         """
-        test_dataset = None
+        print("[dataset]: using test setup ...")
+        self.vocabulary = ["empty"]
+        self.eval_dataset = ABSADataset(data_path=self.dev_path, mode=self.in_mode, task=self.task,
+                                        tokenizer=self.tokenizer, vocab="bert", test=True)
         return
 
     def train_dataloader(self, *args, **kwargs):

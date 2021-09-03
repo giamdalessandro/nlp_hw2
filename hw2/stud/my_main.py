@@ -13,19 +13,19 @@ from tasks_metrics import *
 from utils_dataset import CATEGORY_TAGS, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, \
                         ABSADataModule, read_json_data
-from utils_classifier import ABSALightningModule, TaskCCategoryExtractionModel, \
+from utils_classifier import ABSALightningModule, TaskCCategoryExtractionModel, raw2_collate_fn, \
                         seq_collate_fn,  raw_collate_fn, get_preds_terms, cat_collate_fn, \
                         TaskAModel, TaskATermExtracrionModel, TaskBAspectSentimentModel, \
                         TaskDCategorySentimentModel
 
 DEVICE     = "cpu"
-TRAIN      = False
+TRAIN      = True
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
-TASK       = "C"  # A, B, C or D
+TASK       = "A"  # A, B, C or D
 METRICS    = True
-SAVE_NAME  = f"RoBERTa_t{TASK}_2FFh_gelu_eps" # test config name
+SAVE_NAME  = f"RoBERTa_tttttt{TASK}_2FFh_gelu_eps" # test config name
 
 
 #### set model hyper parameters
@@ -54,19 +54,20 @@ hparams = {
 print("\n[INFO]: Loading datasets ...")
 if TASK == "A":
     #tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+    #tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-    collate_fn = raw_collate_fn 
+    collate_fn = raw_collate_fn if TRAIN else raw2_collate_fn
 else: 
     # B,C or D
     tokenizer = None
     collate_fn = cat_collate_fn if TASK == "C" else seq_collate_fn
     
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, task=TASK, 
-                            collate_fn=collate_fn, tokenizer=tokenizer)
+data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, task=TASK, 
+                            collate_fn=collate_fn, tokenizer=tokenizer, test=(not TRAIN))
 train_vocab = data_module.vocabulary
 hparams["vocab_size"] = len(train_vocab) # vocab length
 
-train_dataloader = data_module.train_dataloader(num_workers=8)
+# need the eval_dataloader also for testing
 eval_dataloader  = data_module.eval_dataloader(num_workers=8)
 
 
@@ -85,6 +86,7 @@ elif TASK == "D":
 
 if TRAIN:
     #### Trainer
+    train_dataloader = data_module.train_dataloader(num_workers=8)
     # instanciate pl.LightningModule for training with task model
     model = ABSALightningModule(task_model, device=DEVICE)
 
@@ -118,7 +120,7 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "RoBERTa_tC_res2res_2FFh_gelu"
+    LOAD_NAME = "BERT_tA_res2res_2FFh_gelu_eps"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",

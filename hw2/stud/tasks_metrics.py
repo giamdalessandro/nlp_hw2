@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
 from utils_dataset import _read_data_taskA, _read_data_taskB, _read_data_taskC, _read_data_taskD
-from utils_classifier import raw_collate_fn, seq_collate_fn, cat_collate_fn, get_preds_terms
+from utils_classifier import raw2_collate_fn, seq_collate_fn, cat_collate_fn, get_preds_terms
 
 POLARITY_INV = {
 	0 : "un-polarized",   # dummy label for sentences with no target
@@ -45,66 +45,63 @@ IDX2LABEL = {
 
 
 ### task predict
-def predict_taskA(model, samples: List[Dict], step_size: int=32, label_tags: Dict=IDX2LABEL, verbose=False):
-    """ TODO
+def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=IDX2LABEL, verbose=False):
+    """ TODO TODO TODO
     Perform prediction for task A, step_size element at a time.
     """
     print("[preds]: predicting on task A ...")
     model.freeze()
     predicted = []  # List[Dict] for output
 
-    # pre-processing data
-    data_elems = _read_data_taskA(test=True, test_samples=samples)
+    # pre-process data
+    dataA_elems = _read_data_taskA(test=True, test_samples=samples)
+    dataB_elems = _read_data_taskB(test=True, test_samples=samples)
 
-    for step in range(0,len(data_elems), step_size):
+    for step in range(0,len(dataA_elems), step_size):
         # test step_size samples at a time
-        if step+step_size <= len(data_elems):
-            step_batch = data_elems[step:step+step_size]
+        if step+step_size <= len(dataA_elems):
+            step_batch_A = dataA_elems[step:step+step_size]
+            step_batch_B = dataB_elems[step:step+step_size]
         else:
-            step_batch = data_elems[step:]
+            step_batch_A = dataA_elems[step:]
+            step_batch_B = dataB_elems[step:]
 
-        if verbose: print("batch_size:", len(step_batch))
+        if verbose: print("batch_size:", len(step_batch_A))
 
         # use collate_fn to input step_size samples into the model
-        x, y, gt_terms = raw_collate_fn(step_batch)
+        x, y, l_terms, tokens = raw2_collate_fn(step_batch_A)
+        x, y, gt_terms = seq_collate_fn(step_batch_B)
         with torch.no_grad():
             # predict with model
             out = model(x)
             logits = out.logits   
-            pred_labels = torch.argmax(logits, -1)
+            pred_tokens = torch.argmax(logits, -1)
+            _, pred_terms = get_preds_terms(pred_tokens, tokens, roberta=True)
 
         # build (term,aspect) couples to produce correct output for the metrics
         preds = []
-        for i in range(len(gt_terms)): 
-            text = x[i] if isinstance(x[i], str) else x[i][0]
-            if i != len(gt_terms)-1:
-                next_text = x[i+1] if isinstance(x[i+1], str) else x[i+1][0]
-            
+        for i in range(len(pred_terms)): 
             if verbose:
-                print("\ntext:", text)
-                print(f"values: term: {gt_terms[i]}, pred aspect: {label_tags[int(pred_labels[i])]}")
+                print("\npred terms:", pred_terms[i])
+                print(f"label term: {l_terms[i]}")
 
-            if gt_terms[i] != "":   # 0 -> "un-polarized"         
-                # there is a prediction only if there is a ground truth term 
-                # and the related polarity.  
-                preds.append((gt_terms[i],label_tags[int(pred_labels[i])]))
+            for j in pred_terms[i]:
+                # for each predicted term build a couple 
+                preds.append((pred_terms[i],"dummy-polarity"))
                 if verbose: print("[LOFFA]:", preds)
 
-            if next_text != text or i == len(gt_terms)-1:
-                # when input text changes we are dealing with another set of targets,
-                # i.e. another prediction.
-                if verbose: print("[CACCA]:", preds)
-                predicted.append({"targets":preds})
-                next_text = text
-                preds = []
+            if verbose: print("[CACCA]:", preds)
+            predicted.append({"targets":preds})
+            preds = []
 
     print("Num predictions:", len(predicted))
     return predicted
 
+"""
 def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
     """
-    Perform prediction for task B, step_size element at a time.
-    """
+    #Perform prediction for task B, step_size element at a time.
+"""
     print("[preds]: predicting on task B ...")
     model.freeze()
     predicted = []  # List[Dict] for output
@@ -156,6 +153,7 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
 
     print("Num predictions:", len(predicted))
     return predicted
+"""
 
 def predict_taskC(model, samples: List[Dict], step_size: int=32, label_tags: Dict=CATEGORY_INV, verbose=False):
     """
@@ -284,14 +282,17 @@ def precision_metrics(model: pl.LightningModule, l_dataset: DataLoader, l_label_
     all_predictions = []
     all_labels = []
     for indexed_elem in l_dataset:
-        #indexed_in, _, indexed_labels, _, _ = indexed_elem
-        indexed_in, indexed_labels, _ = indexed_elem
+        if task=="A":
+            #indexed_in, _, indexed_labels, _, _ = indexed_elem
+            indexed_in, indexed_labels, _, _= indexed_elem
+        else:
+            indexed_in, indexed_labels, _ = indexed_elem
         outputs = model(indexed_in)
         predictions = torch.argmax(outputs.logits, -1).view(-1)
         labels = indexed_labels.view(-1)
         # 0 -> dummy label or padding label
         # 9 -> to consider all classes
-        skip = 0 if task=="A" or task=="B" else 9
+        skip = 0 if (task=="A" or task=="B") else 9
         valid_indices = labels != skip
         
         valid_predictions = predictions[valid_indices]
@@ -336,16 +337,18 @@ def evaluate_extraction(model: pl.LightningModule, l_dataset: DataLoader):
     scores = {"tp": 0, "fp": 0, "fn": 0}
     for elem in l_dataset:
         #inputs, _, labels, tokens, l_terms = elempreds
-        inputs, labels, _ = elem
+        inputs, labels, l_terms, tokens = elem
         outs = model(inputs)
 
-        preds = torch.argmax(outs.logits, -1).view(-1)
-        t_preds = get_preds_terms(preds, tokens)
-        #print(t_preds)
+        preds = torch.argmax(outs.logits, -1) #.view(-1)
+        t_preds, _ = get_preds_terms(preds, tokens, roberta=True)
         ll = []
         for b in l_terms:
             for l in b:
                 ll.append(l)
+        
+        #print("\ntp:",t_preds)
+        #print("ll:",ll)
 
         pred_terms  = {i for i in t_preds}
         label_terms = {t for t in ll}

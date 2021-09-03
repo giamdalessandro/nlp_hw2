@@ -9,7 +9,7 @@ if torch.cuda.is_available():
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
 
-from tasks_metrics import *
+from utils_metrics import *
 from utils_dataset import CATEGORY_TAGS, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, \
                         ABSADataModule, read_json_data

@@ -9,8 +9,8 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
-from utils_dataset import _read_data_taskB, _read_data_taskD
-from utils_classifier import seq_collate_fn
+from utils_dataset import _read_data_taskA, _read_data_taskB, _read_data_taskC, _read_data_taskD
+from utils_classifier import seq_collate_fn, cat_collate_fn
 
 POLARITY_INV = {
 	0 : "un-polarized",   # dummy label for sentences with no target
@@ -45,6 +45,62 @@ IDX2LABEL = {
 
 
 ### task predict
+def predict_taskA(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
+    """ TODO
+    Perform prediction for task B, step_size element at a time.
+    """
+    print("[preds]: predicting on task B ...")
+    model.freeze()
+    predicted = []  # List[Dict] for output
+
+    # pre-processing data
+    data_elems = _read_data_taskA(test=True, test_samples=samples)
+
+    for step in range(0,len(data_elems), step_size):
+        # test step_size samples at a time
+        if step+step_size <= len(data_elems):
+            step_batch = data_elems[step:step+step_size]
+        else:
+            step_batch = data_elems[step:]
+
+        if verbose: print("batch_size:", len(step_batch))
+
+        # use collate_fn to input step_size samples into the model
+        x, y, gt_terms = seq_collate_fn(step_batch)
+        with torch.no_grad():
+            # predict with model
+            out = model(x)
+            logits = out.logits   
+            pred_labels = torch.argmax(logits, -1)
+
+        # build (term,aspect) couples to produce correct output for the metrics
+        preds = []
+        for i in range(len(gt_terms)): 
+            text = x[i] if isinstance(x[i], str) else x[i][0]
+            if i != len(gt_terms)-1:
+                next_text = x[i+1] if isinstance(x[i+1], str) else x[i+1][0]
+            
+            if verbose:
+                print("\ntext:", text)
+                print(f"values: term: {gt_terms[i]}, pred aspect: {label_tags[int(pred_labels[i])]}")
+
+            if gt_terms[i] != "":   # 0 -> "un-polarized"         
+                # there is a prediction only if there is a ground truth term 
+                # and the related polarity.  
+                preds.append((gt_terms[i],label_tags[int(pred_labels[i])]))
+                if verbose: print("[LOFFA]:", preds)
+
+            if next_text != text or i == len(gt_terms)-1:
+                # when input text changes we are dealing with another set of targets,
+                # i.e. another prediction.
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"targets":preds})
+                next_text = text
+                preds = []
+
+    print("Num predictions:", len(predicted))
+    return predicted
+
 def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
     """
     Perform prediction for task B, step_size element at a time.
@@ -109,8 +165,13 @@ def predict_taskC(model, samples: List[Dict], step_size: int=32, label_tags: Dic
     model.freeze()
     predicted = []  # List[Dict] for output
 
+    # to correctly get the output labels
+    sigmoid = torch.nn.Sigmoid()
+    threshold = torch.tensor([0.5])
+
+
     # pre-processing data
-    data_elems = _read_data_taskD(test=True, test_samples=samples)
+    data_elems = _read_data_taskC(test=True, test_samples=samples)
     for step in range(0,len(data_elems), step_size):
         # test step_size samples at a time
         if step+step_size <= len(data_elems):
@@ -121,29 +182,34 @@ def predict_taskC(model, samples: List[Dict], step_size: int=32, label_tags: Dic
         if verbose: print("batch_size:", len(step_batch))
 
         # use collate_fn to input step_size samples into the model
-        x, _, gt_cats = seq_collate_fn(step_batch)
+        x, _, gt_cats = cat_collate_fn(step_batch)
         with torch.no_grad():
             # predict with model
             out = model(x)
             logits = out.logits   
-            pred_labels = torch.argmax(logits, -1)
+            logits = sigmoid(logits)
+            pred_labels = (logits>threshold).float()*1
+            if verbose:
+                print("logits:", logits)
+                print("preds: ", pred_labels)
 
         # build (term,aspect) couples to produce correct output for the metrics
         preds = []
         for i in range(len(gt_cats)): 
             # for each elem in collate batch
-            text = x[i][0]
+            text = x[i]
             if i != len(gt_cats)-1:
-                next_text = x[i+1][0]
+                next_text = x[i+1]
             
             if verbose:
                 print("\ntext:", text)
-                print(f"values: cat: {gt_cats[i]}, pred cat: {label_tags[int(pred_labels[i])]}")
+                print(f"values: cat: {gt_cats[i]}, pred cat: {pred_labels[i]}")
 
-            # there is a prediction only if there is a ground truth term 
-            # and the related polarity.  
-            preds.append((label_tags[int(pred_labels[i])], "dummy-polarity"))
-            if verbose: print("[LOFFA]:", preds)
+            for p in range(len(pred_labels[0])):
+                # for each prediction append the categories that scores 1.
+                if pred_labels[i][p] == 1:   
+                    preds.append((label_tags[p], "dummy-polarity"))
+                    if verbose: print("[LOFFA]:", preds)
 
             if next_text != text or i == len(gt_cats)-1:
                 # when input text changes we are dealing with another set of targets,

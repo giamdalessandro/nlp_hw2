@@ -23,7 +23,7 @@ TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
-TASK       = "D"  # A, B, C or D
+TASK       = "C"  # A, B, C or D
 METRICS    = True
 SAVE_NAME  = f"RoBERTa_t{TASK}_2FFh_gelu_eps" # test config name
 
@@ -120,7 +120,7 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "version_5_lr16_drop06_868"
+    LOAD_NAME = "RoBERTa_tC_res2res_2FFh_gelu"
     print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
     model = ABSALightningModule(test=True).load_from_checkpoint(
         checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",

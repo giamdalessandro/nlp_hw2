@@ -33,7 +33,7 @@ def get_preds_terms(preds, tokens):
 
 def get_label_tokens(targets: dict, tokenizer):
     """
-    Commento sbagliato come un negroni ma senza negroni.
+    Commento sbagliato come un negroni, ma senza negroni.
     """
     for tgt in targets:
         if len(tgt[1]) > 0:
@@ -266,6 +266,30 @@ class TaskBAspectSentimentModel(nn.Module):
         y = None if (y is None or test) else y.long()
         output = self.transfModel(**tokens, labels=y)
         return output
+
+class taskABModel(nn.Module):
+    def __init__(self, hparams: dict, device: str="cpu"):
+        super().__init__()
+        self.device  = device
+        self.hparams = hparams
+        print_hparams(hparams)
+
+        self.tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+        # load best task-A model
+        self.A_model = ABSALightningModule(test=True).load_from_checkpoint(
+            checkpoint_path="model/to_save/taskA/BERT_tA_res2res_2FFh_gelu_eps.ckpt",
+            model=TaskATermExtracrionModel(hparams=hparams, tokenizer=self.tokenizer, device=device)
+        )
+        # load best task-B model
+        self.B_model = ABSALightningModule(test=True).load_from_checkpoint(
+            checkpoint_path="model/to_save/taskB/BERT_tB_res2res_2FFh_gelu3_toktok_f1.ckpt",
+            model=TaskBAspectSentimentModel(hparams=hparams, device=device)
+        )
+
+    #def forward(self, x, y=None, test: bool=False):
+    #    out_A = self.A_model(x)
+    #    out_B = self.B_model(x)
+    #    return out_A, out_B
 
 ## task C,D
 class TaskCCategoryExtractionModel(nn.Module):

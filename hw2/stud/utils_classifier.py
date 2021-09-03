@@ -3,11 +3,13 @@ import torchmetrics
 from torch import nn
 
 from typing import List, Dict
-from utils_general import *
 
 import pytorch_lightning as pl
 from transformers import BertForTokenClassification, BertTokenizer, BertForSequenceClassification, \
                         RobertaForSequenceClassification, RobertaTokenizer
+
+from utils_general import *
+from utils_dataset import _read_data_taskB
 
 POLARITY_INV = {
 	0 : "un-polarized",   # dummy label for sentences with no target

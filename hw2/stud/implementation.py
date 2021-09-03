@@ -6,8 +6,8 @@ import random
 
 ## student imports
 import torch
-from stud.utils_dataset import 
-from stud.utils_classifier import TaskBAspectSentimentModel
+#from stud.utils_dataset import 
+from stud.utils_classifier import ABSALightningModule, TaskBAspectSentimentModel
 
 
 def build_model_b(device: str) -> Model:
@@ -26,7 +26,14 @@ def build_model_b(device: str) -> Model:
         "cls_output_dim": 5,     # num of labels to predict
         "dropout"       : 0.2
     }
-    return TaskBAspectSentimentModel(hparams=hparams, device=device) #RandomBaseline()
+    task_model = TaskBAspectSentimentModel(hparams=hparams, device=device)
+
+    print(f"\n[INFO]: Loading saved model  ...")
+    model = ABSALightningModule(test=True).load_from_checkpoint(
+        checkpoint_path=f"model/to_docker/BERT_tB_res2res_2FFh_gelu3_toktok_f1.ckpt",
+        model=task_model
+    )
+    return model  #RandomBaseline()
 
 def build_model_ab(device: str) -> Model:
     """
@@ -207,9 +214,11 @@ class StudentModel(Model):
             pred_sample = {}
             words = None
             if self.mode == 'ab':
-
+                return 
             if self.mode == 'b':
-
+                model = build_model_b(device="cpu")
+                return model.predict(samples)
             if self.mode == 'cd':
+                return
 
         return preds

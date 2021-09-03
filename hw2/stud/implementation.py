@@ -156,10 +156,8 @@ class RandomBaseline(Model):
 
 
 class StudentModel(Model):
-    
     # STUDENT: construct here your model
     # this class should be loading your weights and vocabulary
-
     def predict(self, samples: List[Dict]) -> List[Dict]:
         '''
         --> !!! STUDENT: implement here your predict function !!! <--
@@ -209,16 +207,15 @@ class StudentModel(Model):
                         }
                     ]
         '''
-        preds = []
-        for sample in samples:
-            pred_sample = {}
-            words = None
-            if self.mode == 'ab':
-                return 
-            if self.mode == 'b':
-                model = build_model_b(device="cpu")
-                return model.predict(samples)
-            if self.mode == 'cd':
-                return
-
-        return preds
+        #preds = []
+        #for sample in samples:
+        #    pred_sample = {}
+        #    words = None
+        #    if self.mode == 'ab':
+        #        return 
+        #    if self.mode == 'b':
+        #        model = build_model_b(device="cpu")
+        #        return model.predict(samples)
+        #    if self.mode == 'cd':
+        #        return
+        return

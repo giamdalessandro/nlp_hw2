@@ -8,8 +8,12 @@ import pytorch_lightning as pl
 from transformers import BertForTokenClassification, BertTokenizer, BertForSequenceClassification, \
                         RobertaForSequenceClassification, RobertaTokenizer
 
-from utils_general import *
-from utils_dataset import _read_data_taskB
+try:
+    from utils_general import *
+    from utils_dataset import _read_data_taskB
+except:
+    from stud.utils_general import *
+    from stud.utils_dataset import _read_data_taskB
 
 POLARITY_INV = {
 	0 : "un-polarized",   # dummy label for sentences with no target
@@ -505,7 +509,8 @@ class ABSALightningModule(pl.LightningModule):
     def backward(self, loss, optimizer, optimizer_idx, *args, **kwargs):
         return super().backward(loss, optimizer, optimizer_idx, retain_graph=True, *args, **kwargs)
 
-
+    def predict(self, samples: List[Dict]):
+        return self.model.predict(samples)
 
 
 

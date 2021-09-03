@@ -56,13 +56,11 @@ if TASK == "A":
     #tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     collate_fn = raw_collate_fn 
-else:
+else: 
+    # B,C or D
     tokenizer = None
-    if TASK == "C":
-        collate_fn = cat_collate_fn
-    elif TASK == "B" or TASK == "D":
-        collate_fn = seq_collate_fn
-
+    collate_fn = cat_collate_fn if TASK == "C" else seq_collate_fn
+    
 data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=RESTAURANT_DEV, task=TASK, 
                             collate_fn=collate_fn, tokenizer=tokenizer)
 train_vocab = data_module.vocabulary
@@ -146,21 +144,23 @@ if METRICS:
         precisions = precision_metrics(model, eval_dataloader, label_dict, task=TASK)
         evaluate_precision(precisions=precisions, task=TASK)
 
-    #print("\n[INFO]: evaluate extraction  ...")
-    #evaluate_extraction(model, eval_dataloader)
+    if TASK == "A":
+        print("\n[INFO]: evaluate extraction  ...")
+        evaluate_extraction(model, eval_dataloader)
 
-    print("\n[INFO]: evaluate sentiment  ...")
-    samples = read_json_data(RESTAURANT_DEV)
-    if TASK == "B":
-        predictions = predict_taskB(model, samples=samples)
-        evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")
+    else:
+        print(f"\n[INFO]: evaluate sentiment on task '{TASK}' ...")
+        samples = read_json_data(RESTAURANT_DEV)
+        if TASK == "B":
+            predictions = predict_taskB(model, samples=samples)
+            evaluate_sentiment(samples, predictions, mode="Aspect Sentiment")
 
-    elif TASK == "C":
-        # TODO
-        predictions = predict_taskC(model, samples=samples)
-        evaluate_sentiment(samples, predictions, mode="Category Extraction")
+        elif TASK == "C":
+            # TODO
+            predictions = predict_taskC(model, samples=samples)
+            evaluate_sentiment(samples, predictions, mode="Category Extraction")
 
-    elif TASK == "D":
-        predictions = predict_taskD(model, samples=samples)
-        evaluate_sentiment(samples, predictions, mode="Category Sentiment")
-        
+        elif TASK == "D":
+            predictions = predict_taskD(model, samples=samples)
+            evaluate_sentiment(samples, predictions, mode="Category Sentiment")
+            

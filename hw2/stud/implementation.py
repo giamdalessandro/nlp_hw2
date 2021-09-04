@@ -6,7 +6,8 @@ import random
 
 ## student imports
 import torch
-from stud.utils_classifier import ABSALightningModule, TaskBAspectSentimentModel
+from stud.utils_classifier import ABSALightningModule, TaskBAspectSentimentModel, \
+                                TaskABModel
 
 
 def build_model_b(device: str) -> Model:
@@ -18,11 +19,12 @@ def build_model_b(device: str) -> Model:
         A Model instance that implements aspect sentiment analysis of the ABSA pipeline.
             b: Aspect sentiment analysis.
     """
+    # just to initialize the model
     hparams = {
         "task"          : "B",
-        "embedding_dim" : 768,   # embedding dimension -> (100 GloVe | 768 BertModel)
-        "cls_hidden_dim": 64,    # hidden linear layer dim
-        "cls_output_dim": 5,     # num of labels to predict
+        "embedding_dim" : 768,   
+        "cls_hidden_dim": 64,    
+        "cls_output_dim": 5,   
         "dropout"       : 0.2
     }
     task_model = TaskBAspectSentimentModel(hparams=hparams, device=device)
@@ -32,7 +34,8 @@ def build_model_b(device: str) -> Model:
         checkpoint_path=f"model/to_docker/BERT_tB_res2res_2FFh_gelu3_toktok_f1.ckpt",
         model=task_model
     )
-    return model  #RandomBaseline()
+    #RandomBaseline()
+    return model  
 
 def build_model_ab(device: str) -> Model:
     """
@@ -45,8 +48,16 @@ def build_model_ab(device: str) -> Model:
             b: Aspect sentiment analysis.
 
     """
+    # just to initialize the model
+    hparams = {
+        "task"          : "B",
+        "embedding_dim" : 768,   
+        "cls_hidden_dim": 64,    
+        "cls_output_dim": 5,   
+        "dropout"       : 0.2
+    }
     # return RandomBaseline(mode='ab')
-    raise NotImplementedError
+    raise TaskABModel(hparams=hparams, device=device)
 
 def build_model_cd(device: str) -> Model:
     """
@@ -157,6 +168,16 @@ class RandomBaseline(Model):
 class StudentModel(Model):
     # STUDENT: construct here your model
     # this class should be loading your weights and vocabulary
+    def __init__(self, mode = 'b'):
+        if self.mode == 'ab':
+            self.model = build_model_ab(device="cpu") 
+
+        if self.mode == 'cd':
+            self.model = build_model_cd(device="cpu")
+    
+        if self.mode == 'b':
+            self.model = build_model_b(device="cpu")
+
     def predict(self, samples: List[Dict]) -> List[Dict]:
         '''
         --> !!! STUDENT: implement here your predict function !!! <--
@@ -206,15 +227,4 @@ class StudentModel(Model):
                         }
                     ]
         '''
-        #preds = []
-        #for sample in samples:
-        #    pred_sample = {}
-        #    words = None
-        #    if self.mode == 'ab':
-        #        return 
-        #    if self.mode == 'b':
-        #        model = build_model_b(device="cpu")
-        #        return model.predict(samples)
-        #    if self.mode == 'cd':
-        #        return
-        return
+        return self.model.predict(samples)

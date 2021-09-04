@@ -9,8 +9,6 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import precision_score
 
-from utils_dataset import _read_data_taskA, _read_data_taskB, _read_data_taskC, _read_data_taskD
-from utils_classifier import raw2_collate_fn, seq_collate_fn, cat_collate_fn, get_preds_terms
 
 POLARITY_INV = {
 	0 : "un-polarized",   # dummy label for sentences with no target

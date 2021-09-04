@@ -8,20 +8,15 @@ import pytorch_lightning as pl
 from transformers import BertForTokenClassification, BertTokenizer, BertForSequenceClassification, \
                         RobertaForSequenceClassification, RobertaTokenizer
 
+from utils_metrics import CATEGORY_INV, IDX2LABEL, POLARITY_2_INV, POLARITY_INV
+
 try:
     from utils_general import *
-    from utils_dataset import _read_data_taskB
+    from utils_dataset import _read_data_taskA, _read_data_taskB, _read_data_taskC, _read_data_taskD
 except:
     from stud.utils_general import *
-    from stud.utils_dataset import _read_data_taskB
-
-POLARITY_INV = {
-	0 : "un-polarized",   # dummy label for sentences with no target
-    1 : "positive",
-    2 : "negative",
-    3 : "neutral",
-    4 : "conflict"
-}
+    from stud.utils_dataset import _read_data_taskA, _read_data_taskB, _read_data_taskC, _read_data_taskD, \
+                                IDX2LABEL, CATEGORY_INV, POLARITY_INV, POLARITY_2_INV
 
 
 class CustomRobertaClassificationHead(nn.Module):
@@ -47,12 +42,12 @@ class CustomRobertaClassificationHead(nn.Module):
 
 
 ### task predict
-def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=IDX2LABEL, verbose=False):
+def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
     """ TODO TODO TODO
     Perform prediction for task A, step_size element at a time.
     """
     print("[preds]: predicting on task A ...")
-    model.freeze()
+    #model.freeze()
     predicted = []  # List[Dict] for output
 
     # pre-process data
@@ -71,14 +66,19 @@ def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Di
         if verbose: print("batch_size:", len(step_batch_A))
 
         # use collate_fn to input step_size samples into the model
-        x, y, l_terms, tokens = raw2_collate_fn(step_batch_A)
-        x, y, gt_terms = seq_collate_fn(step_batch_B)
+        x, _, l_terms, tokens = raw2_collate_fn(step_batch_A)
+        x, _, gt_terms = seq_collate_fn(step_batch_B)
         with torch.no_grad():
-            # predict with model
-            out = model(x)
-            logits = out.logits   
-            pred_tokens = torch.argmax(logits, -1)
+            # predict with modelAB
+            out_A, out_B = model(x)
+
+            logits_A = out_A.logits   
+            pred_tokens = torch.argmax(logits_A, -1)
             _, pred_terms = get_preds_terms(pred_tokens, tokens, roberta=True)
+
+            logits_B = out_B.logits   
+            pred_sents = torch.argmax(logits_B, -1)
+
 
         # build (term,aspect) couples to produce correct output for the metrics
         preds = []
@@ -89,7 +89,7 @@ def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Di
 
             for j in pred_terms[i]:
                 # for each predicted term build a couple 
-                preds.append((pred_terms[i],"dummy-polarity"))
+                preds.append((pred_terms[i],label_tags[int(pred_sents[i+j])])))
                 if verbose: print("[LOFFA]:", preds)
 
             if verbose: print("[CACCA]:", preds)
@@ -413,10 +413,13 @@ class TaskABModel(nn.Module):
             model=TaskBAspectSentimentModel(hparams=hparams, device=device)
         )
 
-    #def forward(self, x, y=None, test: bool=False):
-    #    out_A = self.A_model(x)
-    #    out_B = self.B_model(x)
-    #    return out_A, out_B
+    def forward(self, x, y=None, test: bool=False):
+        out_A = self.A_model(x)
+        out_B = self.B_model(x)
+        return out_A, out_B
+
+    def predict(self, samples: List[Dict]):
+        return predict_taskAB(self, samples=samples)
 
 ## task C,D
 class TaskCCategoryExtractionModel(nn.Module):

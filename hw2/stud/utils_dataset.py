@@ -241,9 +241,9 @@ def _read_data_taskD(data_path: str="path", test: bool=False, test_samples=None)
         cats_list  = []
         for cat in categories:
             category = cat[0]
-            polarity = cat[1]
-
             sent_cats.append([text,cat])
+
+            polarity = "neutral" if test else cat[1]
             pol_labels.append(POLARITY_2_TAGS[polarity])
             cats_list.append(category)
 

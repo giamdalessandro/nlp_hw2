@@ -7,7 +7,7 @@ import random
 ## student imports
 import torch
 from stud.utils_classifier import ABSALightningModule, TaskBAspectSentimentModel, \
-                                TaskABModel
+                                TaskABModel, TaskCDModel
 
 
 def build_model_b(device: str) -> Model:
@@ -50,14 +50,14 @@ def build_model_ab(device: str) -> Model:
     """
     # just to initialize the model
     hparams = {
-        "task"          : "B",
+        "task"          : "AB",
         "embedding_dim" : 768,   
         "cls_hidden_dim": 64,    
         "cls_output_dim": 5,   
         "dropout"       : 0.2
     }
     # return RandomBaseline(mode='ab')
-    raise TaskABModel(hparams=hparams, device=device)
+    return TaskABModel(hparams=hparams, device=device)
 
 def build_model_cd(device: str) -> Model:
     """
@@ -70,8 +70,17 @@ def build_model_cd(device: str) -> Model:
             c: Category identification.
             d: Category sentiment analysis.
     """
+    # just to initialize the model
+    hparams = {
+        "task"          : "CD",
+        "embedding_dim" : 768,   
+        "cls_hidden_dim": 64,    
+        "cls_output_dim": 5,   
+        "dropout"       : 0.2
+    }
     # return RandomBaseline(mode='cd')
-    raise NotImplementedError
+    return TaskCDModel(hparams=hparams, device=device)
+
 
 class RandomBaseline(Model):
 
@@ -169,12 +178,12 @@ class StudentModel(Model):
     # STUDENT: construct here your model
     # this class should be loading your weights and vocabulary
     def __init__(self, mode = 'b'):
+        self.mode = mode
+
         if self.mode == 'ab':
             self.model = build_model_ab(device="cpu") 
-
         if self.mode == 'cd':
             self.model = build_model_cd(device="cpu")
-    
         if self.mode == 'b':
             self.model = build_model_b(device="cpu")
 

@@ -24,97 +24,6 @@ POLARITY_INV = {
 }
 
 
-### RNNs collate functions
-def rnn_collate_fn(data_elements: list):
-    """
-    Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y, token, terms) tuples)
-    """
-    X = []
-    x_lens = []
-    y = []
-    tokens = []
-    terms = []
-    for elem in data_elements:
-        X.append(torch.Tensor(elem[0]))
-        x_lens.append(len(elem[0]))
-        y.append(torch.Tensor(elem[1]))
-        tokens.append(elem[2])
-        terms.append(elem[3])
-
-    X = torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
-    x_lens = torch.Tensor(x_lens)
-    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, x_lens, y, tokens, terms
-
-def raw_collate_fn(data_elements: list):
-    """
-    Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y, toks) tuples, where `x` is raw input text, 
-    `y` the ground truth label and `toks` the tokenized input)
-    """
-    X = []
-    y = []
-    for elem in data_elements:
-        X.append(elem[0])
-        y.append(torch.Tensor(elem[1]))
-
-    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, y, None
-
-def raw2_collate_fn(data_elements: list):
-    """
-    Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y, toks) tuples, where `x` is raw input text, 
-    `y` the ground truth label and `toks` the tokenized input)
-    """
-    X = []
-    y = []
-    toks  = []
-    terms = []
-    for elem in data_elements:
-        X.append(elem[0])
-        y.append(torch.Tensor(elem[1]))
-        terms.append(elem[2])
-        toks.append(elem[3])
-
-    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, y, terms, toks
-
-def cat_collate_fn(data_elements: list):
-    """
-    Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
-    """
-    X = []
-    y = []
-    cats = []
-    for elem in data_elements:
-        X.append(elem[0])
-        y.append(torch.Tensor(elem[1]))
-        cats.append(elem[2])
-
-    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
-    return X, y, cats
-
-def seq_collate_fn(data_elements: list):
-    """
-    Override the collate function in order to deal with the different sizes of the input 
-    index sequences. (data_elements is a list of (x, y, terms) tuples, where "x" is raw input text and 
-    "term" a list of aspect terms or categories)
-    """
-    X = []
-    y = []
-    terms = []
-    for elem in data_elements:
-        #print(elem)
-        X.extend(elem[0])
-        y.extend(elem[1])
-        terms.extend(elem[2])
-
-    y = torch.Tensor(y)
-    return X, y, terms
-
 class CustomRobertaClassificationHead(nn.Module):
     """
     Override of `RobertaClassificationHead` module to customize 
@@ -137,7 +46,59 @@ class CustomRobertaClassificationHead(nn.Module):
         return x
 
 
-## predict utils
+### task predict
+def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=IDX2LABEL, verbose=False):
+    """ TODO TODO TODO
+    Perform prediction for task A, step_size element at a time.
+    """
+    print("[preds]: predicting on task A ...")
+    model.freeze()
+    predicted = []  # List[Dict] for output
+
+    # pre-process data
+    dataA_elems = _read_data_taskA(test=True, test_samples=samples)
+    dataB_elems = _read_data_taskB(test=True, test_samples=samples)
+
+    for step in range(0,len(dataA_elems), step_size):
+        # test step_size samples at a time
+        if step+step_size <= len(dataA_elems):
+            step_batch_A = dataA_elems[step:step+step_size]
+            step_batch_B = dataB_elems[step:step+step_size]
+        else:
+            step_batch_A = dataA_elems[step:]
+            step_batch_B = dataB_elems[step:]
+
+        if verbose: print("batch_size:", len(step_batch_A))
+
+        # use collate_fn to input step_size samples into the model
+        x, y, l_terms, tokens = raw2_collate_fn(step_batch_A)
+        x, y, gt_terms = seq_collate_fn(step_batch_B)
+        with torch.no_grad():
+            # predict with model
+            out = model(x)
+            logits = out.logits   
+            pred_tokens = torch.argmax(logits, -1)
+            _, pred_terms = get_preds_terms(pred_tokens, tokens, roberta=True)
+
+        # build (term,aspect) couples to produce correct output for the metrics
+        preds = []
+        for i in range(len(pred_terms)): 
+            if verbose:
+                print("\npred terms:", pred_terms[i])
+                print(f"label term: {l_terms[i]}")
+
+            for j in pred_terms[i]:
+                # for each predicted term build a couple 
+                preds.append((pred_terms[i],"dummy-polarity"))
+                if verbose: print("[LOFFA]:", preds)
+
+            if verbose: print("[CACCA]:", preds)
+            predicted.append({"targets":preds})
+            preds = []
+
+    print("Num predictions:", len(predicted))
+    return predicted
+
 def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
     """
     Perform prediction for task B, step_size element at a time.
@@ -188,6 +149,126 @@ def predict_taskB(model, samples: List[Dict], step_size: int=32, label_tags: Dic
                 # i.e. another prediction.
                 if verbose: print("[CACCA]:", preds)
                 predicted.append({"targets":preds})
+                next_text = text
+                preds = []
+
+    print("Num predictions:", len(predicted))
+    return predicted
+
+def predict_taskC(model, samples: List[Dict], step_size: int=32, label_tags: Dict=CATEGORY_INV, verbose=False):
+    """
+    Perform prediction for task C, step_size element at a time.
+    """
+    print("[preds]: predicting on task C ...")
+    model.freeze()
+    predicted = []  # List[Dict] for output
+
+    # to correctly get the output labels
+    sigmoid = torch.nn.Sigmoid()
+    threshold = torch.tensor([0.5])
+
+
+    # pre-processing data
+    data_elems = _read_data_taskC(test=True, test_samples=samples)
+    for step in range(0,len(data_elems), step_size):
+        # test step_size samples at a time
+        if step+step_size <= len(data_elems):
+            step_batch = data_elems[step:step+step_size]
+        else:
+            step_batch = data_elems[step:]
+
+        if verbose: print("batch_size:", len(step_batch))
+
+        # use collate_fn to input step_size samples into the model
+        x, _, gt_cats = cat_collate_fn(step_batch)
+        with torch.no_grad():
+            # predict with model
+            out = model(x)
+            logits = out.logits   
+            logits = sigmoid(logits)
+            pred_labels = (logits>threshold).float()*1
+            if verbose:
+                print("logits:", logits)
+                print("preds: ", pred_labels)
+
+        # build (term,aspect) couples to produce correct output for the metrics
+        preds = []
+        for i in range(len(gt_cats)): 
+            # for each elem in collate batch
+            text = x[i]
+            if i != len(gt_cats)-1:
+                next_text = x[i+1]
+            
+            if verbose:
+                print("\ntext:", text)
+                print(f"values: cat: {gt_cats[i]}, pred cat: {pred_labels[i]}")
+
+            for p in range(len(pred_labels[0])):
+                # for each prediction append the categories that scores 1.
+                if pred_labels[i][p] == 1:   
+                    preds.append((label_tags[p], "dummy-polarity"))
+                    if verbose: print("[LOFFA]:", preds)
+
+            if next_text != text or i == len(gt_cats)-1:
+                # when input text changes we are dealing with another set of targets,
+                # i.e. another prediction.
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"categories":preds})
+                next_text = text
+                preds = []
+
+    print("Num predictions:", len(predicted))
+    return predicted
+
+def predict_taskD(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_2_INV, verbose=False):
+    """
+    Perform prediction for task D, step_size element at a time.
+    """
+    print("[preds]: predicting on task D ...")
+    model.freeze()
+    predicted = []  # List[Dict] for output
+
+    # pre-processing data
+    data_elems = _read_data_taskD(test=True, test_samples=samples)
+    for step in range(0,len(data_elems), step_size):
+        # test step_size samples at a time
+        if step+step_size <= len(data_elems):
+            step_batch = data_elems[step:step+step_size]
+        else:
+            step_batch = data_elems[step:]
+
+        if verbose: print("batch_size:", len(step_batch))
+
+        # use collate_fn to input step_size samples into the model
+        x, _, gt_cats = seq_collate_fn(step_batch)
+        with torch.no_grad():
+            # predict with model
+            out = model(x)
+            logits = out.logits   
+            pred_labels = torch.argmax(logits, -1)
+
+        # build (term,aspect) couples to produce correct output for the metrics
+        preds = []
+        for i in range(len(gt_cats)): 
+            # for each elem in collate batch
+            text = x[i][0]
+            if i != len(gt_cats)-1:
+                next_text = x[i+1][0]
+            
+            if verbose:
+                print("\ntext:", text)
+                print(f"values: cat: {gt_cats[i]}, pred sent: {label_tags[int(pred_labels[i])]}")
+
+            # there is a prediction only if there is a ground truth term 
+            # and the related polarity.  
+            preds.append((gt_cats[i],label_tags[int(pred_labels[i])]))
+            if verbose: print("[LOFFA]:", preds)
+
+            if next_text != text or i == len(gt_cats)-1:
+                # when input text changes we are dealing with another set of targets,
+                # i.e. another prediction.
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"categories":preds})
                 next_text = text
                 preds = []
 

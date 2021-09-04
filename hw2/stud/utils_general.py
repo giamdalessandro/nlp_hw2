@@ -105,3 +105,95 @@ def remove_batch_padding(rnn_out: torch.Tensor, lenghts):
     vectors = clean_batch # torch.stack(clean_batch)
     #print("vectors out:", vectors.size())
     return vectors
+
+
+### RNNs collate functions
+def rnn_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y, token, terms) tuples)
+    """
+    X = []
+    x_lens = []
+    y = []
+    tokens = []
+    terms = []
+    for elem in data_elements:
+        X.append(torch.Tensor(elem[0]))
+        x_lens.append(len(elem[0]))
+        y.append(torch.Tensor(elem[1]))
+        tokens.append(elem[2])
+        terms.append(elem[3])
+
+    X = torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
+    x_lens = torch.Tensor(x_lens)
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, x_lens, y, tokens, terms
+
+def raw_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y, toks) tuples, where `x` is raw input text, 
+    `y` the ground truth label and `toks` the tokenized input)
+    """
+    X = []
+    y = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(torch.Tensor(elem[1]))
+
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, y, None
+
+def raw2_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y, toks) tuples, where `x` is raw input text, 
+    `y` the ground truth label and `toks` the tokenized input)
+    """
+    X = []
+    y = []
+    toks  = []
+    terms = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(torch.Tensor(elem[1]))
+        terms.append(elem[2])
+        toks.append(elem[3])
+
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, y, terms, toks
+
+def cat_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y) tuples, where x is raw input text)
+    """
+    X = []
+    y = []
+    cats = []
+    for elem in data_elements:
+        X.append(elem[0])
+        y.append(torch.Tensor(elem[1]))
+        cats.append(elem[2])
+
+    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    return X, y, cats
+
+def seq_collate_fn(data_elements: list):
+    """
+    Override the collate function in order to deal with the different sizes of the input 
+    index sequences. (data_elements is a list of (x, y, terms) tuples, where "x" is raw input text and 
+    "term" a list of aspect terms or categories)
+    """
+    X = []
+    y = []
+    terms = []
+    for elem in data_elements:
+        #print(elem)
+        X.extend(elem[0])
+        y.extend(elem[1])
+        terms.extend(elem[2])
+
+    y = torch.Tensor(y)
+    return X, y, terms

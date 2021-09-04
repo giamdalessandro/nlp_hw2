@@ -10,13 +10,11 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from transformers import BertTokenizer, DistilBertTokenizer
 
 from utils_metrics import *
+from utils_classifier import *
 from utils_dataset import CATEGORY_TAGS, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAGS, \
                         LAPTOP_TRAIN, LAPTOP_DEV, RESTAURANT_DEV, RESTAURANT_TRAIN, \
                         ABSADataModule, read_json_data
-from utils_classifier import ABSALightningModule, TaskCCategoryExtractionModel, raw2_collate_fn, \
-                        seq_collate_fn,  raw_collate_fn, get_preds_terms, cat_collate_fn, \
-                        TaskAModel, TaskATermExtracrionModel, TaskBAspectSentimentModel, \
-                        TaskDCategorySentimentModel
+from utils_general import raw_collate_fn, raw2_collate_fn, seq_collate_fn, cat_collate_fn
 
 DEVICE     = "cpu"
 TRAIN      = True

@@ -177,7 +177,7 @@ class RandomBaseline(Model):
 class StudentModel(Model):
     # STUDENT: construct here your model
     # this class should be loading your weights and vocabulary
-    def __init__(self, mode = 'b'):
+    def __init__(self, mode='cd'):
         self.mode = mode
 
         if self.mode == 'ab':

@@ -94,8 +94,9 @@ def _read_data_taskA(data_path: str="path", tokenizer=None,
     target_final = []
 
     data_dict = read_json_data(data_path) if not test else test_samples
+    #print("data_dict:", len(data_dict))
+
     for entry in data_dict:
-        t_list = []
         # tokenize data sentences
         if bert:
             tokens = tokenizer.tokenize(entry["text"])
@@ -103,10 +104,17 @@ def _read_data_taskA(data_path: str="path", tokenizer=None,
             tokens.append("[SEP]")     # RoBERTa "</s>" <-> BERT "[SEP]"
         else:
             tokens = tokenizer(entry["text"])
+            
         words_list.extend(tokens)
         tok_list.append(tokens)
 
+        if mode == "tokenize":
+            sentences.append(tokens)
+        elif mode == "raw":
+            sentences.append(entry["text"])
+
         # count target words
+        t_list = []
         if not test:
             targets = entry["targets"]
             tgt_list = []
@@ -129,11 +137,6 @@ def _read_data_taskA(data_path: str="path", tokenizer=None,
         else:
             labels.append("dummy")
             target_final.append(0)
-
-        if mode == "tokenize":
-            sentences.append(tokens)
-        elif mode == "raw":
-            sentences.append(entry["text"])
             
     if not test: 
         assert len(sentences) == len(labels)
@@ -152,7 +155,7 @@ def _read_data_taskA(data_path: str="path", tokenizer=None,
 
         return sentences, labels, targets_list, word_counter
     else:
-        return sentences, labels, target_final, tok_list
+        return list(zip(sentences, labels, target_final, tok_list))
 
 def _read_data_taskB(data_path: str="path", test: bool=False, test_samples=None):
     """

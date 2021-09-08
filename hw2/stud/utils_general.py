@@ -47,40 +47,40 @@ def get_preds_terms(preds, tokens, roberta: bool=False, verbose: bool=False):
     """
     if verbose:
         print("\npreds:",preds.size())
-        print("tokens:", len(tokens))
+        print("tokens:", tokens)
 
     pred_terms = []
     sent_terms = []
-    print("preds:", preds)
+    if verbose:
+        print("preds:", preds)
+        print("preds_size:", preds.size())
 
-    for b in range(len(preds)):
-        #if verbose: 
-        print(b)
-        print("preds-b:", preds[b][0])
-        preds = []
+    for b in range(preds.size(0)):
+        if verbose:
+            print("preds-b:", preds[b].size(0))
+        preds_step = []
         term = []
 
         inside = False
-        # len(tokens)
-        for p in range(preds[b]):
+        for p in range(preds.size(1)):
             if not inside:
-                if (preds[b][p] != 0 and preds[b][p] != 3):
-                    term.append(tokens[b][p])
+                if (int(preds[b][p]) != 0 and int(preds[b][p]) != 3):
+                    term.append(tokens[p])
                     inside = True
             else:
                 if (preds[b][p] != 0 and preds[b][p] != 3):
-                    term.append(tokens[b][p])
+                    term.append(tokens[p])
                 else:
-                    if tokens[b][p].startswith("##"):
-                        term.append(tokens[b][p])
+                    if tokens[p].startswith("##"):
+                        term.append(tokens[p])
 
                     ff = clean_tokens_BERT(term)
                     pred_terms.append(ff)
-                    preds.append(ff)
+                    preds_step.append(ff)
                     inside = False
                     term = []
 
-        sent_terms.append(preds)    
+        sent_terms.append(preds_step)    
 
     return pred_terms, sent_terms
 

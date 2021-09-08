@@ -21,7 +21,7 @@ TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
-TASK       = "CD"  # A, B, C, D, AB or CD
+TASK       = "AB"  # A, B, C, D, AB or CD
 METRICS    = True
 SAVE_NAME  = f"RoBERTa_tttttt{TASK}_2FFh_gelu_eps" # test config name
 
@@ -119,7 +119,6 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    TASK = "CD"
     if TASK == "AB":
         model = TaskABModel(hparams=hparams, device=DEVICE)
     elif TASK == "CD":

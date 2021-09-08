@@ -48,58 +48,58 @@ def predict_taskAB(model, samples: List[Dict], tokenizer=None, step_size: int=32
     print("[preds]: predicting on task A+B ...")
     #model.freeze()
     predicted = []  # List[Dict] for output
+    if verbose: 
+        print("sample_size:", len(samples))
+        print(samples[0])
 
     # pre-process data
-    dataA_elems = _read_data_taskA(tokenizer=tokenizer, test=True, test_samples=samples)
-    #dataB_elems = _read_data_taskB(test=True, test_samples=samples)
+    dataA_elems = _read_data_taskA(tokenizer=tokenizer, test=True, test_samples=samples, bert=True)
+    #print("read_data_size:", len(dataA_elems))
 
-    for step in range(0,len(dataA_elems), step_size):
+    for step in range(0,len(samples), step_size):
         # test step_size samples at a time
-        if step+step_size <= len(dataA_elems):
+        if step+step_size <= len(samples):
             step_batch_A = dataA_elems[step:step+step_size]
-            #step_batch_B = dataB_elems[step:step+step_size]
         else:
             step_batch_A = dataA_elems[step:]
-            #step_batch_B = dataB_elems[step:]
 
-        if verbose: print("batch_size:", len(step_batch_A))
+        if verbose: 
+            #print("step-A:", step_batch_A)
+            print("batch_size:", len(step_batch_A))
 
         # use collate_fn to input step_size samples into the model
         x_A, _, _, tokens = raw2_collate_fn(step_batch_A)
-        #print(x_A)
-        #x_B, _, gt_terms = seq_collate_fn(step_batch_B)
+        if verbose:
+            print("sample_size:", len(samples))
+            #print("X-A:", x_A)
         with torch.no_grad():
             # predict with modelAB
-            out_A = model.A_model(x_A[0])
+            for i in range(len(x_A)):
+                out_A = model.A_model(x_A[i])
 
-            logits_A = out_A.logits   
-            pred_tokens = torch.argmax(logits_A, -1)
-            #print(pred_tokens)
-            _, pred_terms = get_preds_terms(pred_tokens, tokens, roberta=True)
-
-            #logits_B = out_B.logits   
-            #pred_sents = torch.argmax(logits_B, -1)
+                logits_A = out_A.logits   
+                pred_tokens = torch.argmax(logits_A, -1)
+                #print(pred_tokens)
+                pred_terms, _ = get_preds_terms(pred_tokens, tokens[i], roberta=True)
 
 
-        # build (term,aspect) couples to produce correct output for the metrics
-        preds = []
-        for i in range(len(pred_terms)): 
-            if verbose:
-                print("\npred terms:", pred_terms[i])
-                #print(f"label term: {l_terms[i]}")
+                # build (term,aspect) couples to produce correct output for the metrics
+                preds = []
+                if verbose:
+                    print("\npred terms:", pred_terms)
 
-            for j in pred_terms[i]:
-                # for each predicted term build a couple
-                out_B = model.B_model([x_A[i],pred_terms[i]])
-                logits_B = out_B.logits   
-                pred_sents = torch.argmax(logits_B, -1)
-                  
-                preds.append((pred_terms[i],label_tags[int(pred_sents)]))
-                if verbose: print("[LOFFA]:", preds)
+                for j in pred_terms:
+                    # for each predicted term build a couple
+                    out_B = model.B_model([[x_A[i],j]])
+                    logits_B = out_B.logits   
+                    pred_sents = torch.argmax(logits_B, -1)
+                    
+                    preds.append((j,label_tags[int(pred_sents)]))
+                    if verbose: print("[LOFFA]:", preds)
 
-            if verbose: print("[CACCA]:", preds)
-            predicted.append({"targets":preds})
-            preds = []
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"targets":preds})
+                preds = []
 
     print("Num predictions:", len(predicted))
     return predicted

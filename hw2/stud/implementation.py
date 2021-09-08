@@ -53,7 +53,7 @@ def build_model_ab(device: str) -> Model:
         "task"          : "AB",
         "embedding_dim" : 768,   
         "cls_hidden_dim": 64,    
-        "cls_output_dim": 5,   
+        "cls_output_dim": 4,   
         "dropout"       : 0.2
     }
     # return RandomBaseline(mode='ab')

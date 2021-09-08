@@ -75,9 +75,9 @@ def load_pretrained_embeddings(vocabulary: dict, max_size: int):
     # return a tensor of size [vocab_size, emb_dim]
     return torch.stack(pretrained, dim=0)
 
-def _read_data_taskA(data_path: str, tokenizer, 
+def _read_data_taskA(data_path: str="path", tokenizer=None, 
         bert: bool=False, 
-        mode: str="tokenize", 
+        mode: str="raw", 
         tagger=None, 
         test: bool=False, 
         test_samples=None
@@ -93,7 +93,7 @@ def _read_data_taskA(data_path: str, tokenizer,
     targets_list = []
     target_final = []
 
-    data_dict = read_json_data(data_path)# if not test else test_samples
+    data_dict = read_json_data(data_path) if not test else test_samples
     for entry in data_dict:
         t_list = []
         # tokenize data sentences
@@ -107,44 +107,49 @@ def _read_data_taskA(data_path: str, tokenizer,
         tok_list.append(tokens)
 
         # count target words
-        targets = entry["targets"]
-        tgt_list = []
-        if len(targets) > 0:
-            t_list.append(targets)
-            for tgt in targets:
-                targets_list.append(tgt[1])
-                tgt_list.append(tgt[1])
-        else:
-            t_list.append([])
+        if not test:
+            targets = entry["targets"]
+            tgt_list = []
+            if len(targets) > 0:
+                t_list.append(targets)
+                for tgt in targets:
+                    targets_list.append(tgt[1])
+                    tgt_list.append(tgt[1])
+            else:
+                t_list.append([])
 
-        # tag input tokens
-        b_tok = tokenizer if bert else None
-        tags = tagger(targets, tokens, bert_tokenizer=b_tok)
-        #print(tags)
-        labels.append(tags)
-        target_final.append(tgt_list)
-        
+            # tag input tokens
+            b_tok = tokenizer if bert else None
+            tags = tagger(targets, tokens, bert_tokenizer=b_tok)
+            #print(tags)
+
+            labels.append(tags)
+            target_final.append(tgt_list)
+
+        else:
+            labels.append("dummy")
+            target_final.append(0)
+
         if mode == "tokenize":
             sentences.append(tokens)
         elif mode == "raw":
             sentences.append(entry["text"])
             
+    if not test: 
+        assert len(sentences) == len(labels)
+        print("sentences:",len(sentences))
+        print("labels:",len(labels))
 
-    assert len(sentences) == len(labels)
-    print("sentences:",len(sentences))
-    print("labels:",len(labels))
+        # count words occurency and frequency            
+        word_counter = collections.Counter(words_list)
+        distinct_words = len(word_counter)
+        print(f"Number of distinct words: {distinct_words}")
+        
+        # count target words occurency and frequency
+        tgts_counter = collections.Counter(targets_list)
+        distinct_tgts = len(tgts_counter)
+        print(f"Number of distinct targets: {distinct_tgts}")
 
-    # count words occurency and frequency            
-    word_counter = collections.Counter(words_list)
-    distinct_words = len(word_counter)
-    print(f"Number of distinct words: {distinct_words}")
-    
-    # count target words occurency and frequency
-    tgts_counter = collections.Counter(targets_list)
-    distinct_tgts = len(tgts_counter)
-    print(f"Number of distinct targets: {distinct_tgts}")
-
-    if not test:
         return sentences, labels, targets_list, word_counter
     else:
         return sentences, labels, target_final, tok_list
@@ -203,22 +208,29 @@ def _read_data_taskC(data_path: str="path", test: bool=False, test_samples=None,
         text = entry["text"]
         categories = entry["categories"]
 
-        # sent_cat = []
-        cats_list  = []
-        vec_y = [0 for i in range(len(cat2id))]
-        for cat in categories:
-            category = cat[0]
-            vec_y[cat2id[category]] = 1
-            cats_list.append(category)
+        sent_cat = []
+        if not test:
+            cats_list  = []
+            vec_y = [0 for i in range(len(cat2id))]
+            for cat in categories:
+                category = cat[0]
+                vec_y[cat2id[category]] = 1
+                cats_list.append(category)
 
-        #for cat in cat2id.keys():
-        #    sent_cat.append([text,cat])
+            labels.append(vec_y)
+            targets_list.append(cats_list)
+
+            #for cat in cat2id.keys():
+            #    sent_cat.append([text,cat])
+            #sentences.append(sent_cat)
+        else:
+            labels.append(0)
+            targets_list.append(["dummy"])
+            
         sentences.append(text)
-        labels.append(vec_y)
-        targets_list.append(cats_list)
 
-    assert len(sentences) == len(labels)
     if not test:
+        assert len(sentences) == len(labels)
         return sentences, labels, targets_list, None
     else:
         return list(zip(sentences,labels,targets_list))
@@ -358,7 +370,7 @@ class ABSADataset(Dataset):
     def _read_data(self, 
         data_path : str, 
         bert : bool=False, 
-        mode : str="tokenize", 
+        mode : str="raw", 
         task : str="A"
         ):
         """

@@ -17,21 +17,21 @@ from utils_dataset import CATEGORY_TAGS, BIO_TAGS, POLARITY_TAGS, POLARITY_2_TAG
 from utils_general import raw_collate_fn, raw2_collate_fn, seq_collate_fn, cat_collate_fn
 
 DEVICE     = "cpu"
-TRAIN      = True
+TRAIN      = False
 NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
-TASK       = "A"  # A, B, C or D
+TASK       = "CD"  # A, B, C, D, AB or CD
 METRICS    = True
 SAVE_NAME  = f"RoBERTa_tttttt{TASK}_2FFh_gelu_eps" # test config name
 
 
 #### set model hyper parameters
-if TASK == "A":
+if TASK == "A" or TASK == "AB":
     num_classes = len(BIO_TAGS)
 elif TASK == "B":
     num_classes = len(POLARITY_TAGS) 
-elif TASK == "C":
+elif TASK == "C" or TASK == "CD":
     num_classes = len(CATEGORY_TAGS)
 elif TASK == "D":
     # no need for dummy "un-polarized" label
@@ -60,13 +60,14 @@ else:
     tokenizer = None
     collate_fn = cat_collate_fn if TASK == "C" else seq_collate_fn
     
-data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, task=TASK, 
-                            collate_fn=collate_fn, tokenizer=tokenizer, test=(not TRAIN))
-train_vocab = data_module.vocabulary
-hparams["vocab_size"] = len(train_vocab) # vocab length
+if (TASK != "AB" and TASK != "CD"): 
+    data_module = ABSADataModule(train_path=RESTAURANT_TRAIN, dev_path=LAPTOP_DEV, task=TASK, 
+                                collate_fn=collate_fn, tokenizer=tokenizer, test=(not TRAIN))
+    train_vocab = data_module.vocabulary
+    hparams["vocab_size"] = len(train_vocab) # vocab length
 
-# need the eval_dataloader also for testing
-eval_dataloader  = data_module.eval_dataloader(num_workers=8)
+    # need the eval_dataloader also for testing
+    eval_dataloader  = data_module.eval_dataloader(num_workers=8)
 
 
 print("\n[INFO]: Building model ...")
@@ -80,7 +81,7 @@ elif TASK == "C":
     task_model = TaskCCategoryExtractionModel(hparams=hparams, device=DEVICE)
 elif TASK == "D":
     task_model = TaskDCategorySentimentModel(hparams=hparams, device=DEVICE)
-    
+
 
 if TRAIN:
     #### Trainer
@@ -118,12 +119,18 @@ if TRAIN:
     trainer.fit(model, train_dataloader, eval_dataloader)
 
 else:
-    LOAD_NAME = "BERT_tA_res2res_2FFh_gelu_eps"
-    print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
-    model = ABSALightningModule(test=True).load_from_checkpoint(
-        checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
-        model=task_model
-    )
+    TASK = "CD"
+    if TASK == "AB":
+        model = TaskABModel(hparams=hparams, device=DEVICE)
+    elif TASK == "CD":
+        model = TaskCDModel(hparams=hparams, device=DEVICE)
+    else:
+        LOAD_NAME = "BERT_tA_res2res_2FFh_gelu_eps"
+        print(f"\n[INFO]: Loading saved model '{LOAD_NAME}' ...")
+        model = ABSALightningModule(test=True).load_from_checkpoint(
+            checkpoint_path=F"model/to_save/task{TASK}/{LOAD_NAME}.ckpt",
+            model=task_model
+        )
 
 
 
@@ -140,7 +147,7 @@ elif TASK == "D":
 
 if METRICS:
     print("\n[INFO]: precison metrics ...")
-    if TASK != "C":
+    if TASK != "C" and (TASK != "AB" and TASK != "CD"):
         precisions = precision_metrics(model, eval_dataloader, label_dict, task=TASK)
         evaluate_precision(precisions=precisions, task=TASK)
 
@@ -163,4 +170,10 @@ if METRICS:
         elif TASK == "D":
             predictions = predict_taskD(model, samples=samples)
             evaluate_sentiment(samples, predictions, mode="Category Sentiment")
+            
+        elif TASK == "AB":
+            model.predict(samples=samples)
+        
+        elif TASK == "CD":
+            model.predict(samples=samples)
             

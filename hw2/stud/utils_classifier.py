@@ -41,7 +41,7 @@ class CustomRobertaClassificationHead(nn.Module):
 
 
 ### task predict
-def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
+def predict_taskAB(model, samples: List[Dict], tokenizer=None, step_size: int=32, label_tags: Dict=POLARITY_INV, verbose=False):
     """ TODO
     Perform prediction for task A+B, step_size element at a time.
     """
@@ -50,33 +50,35 @@ def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Di
     predicted = []  # List[Dict] for output
 
     # pre-process data
-    dataA_elems = _read_data_taskA(test=True, test_samples=samples)
-    dataB_elems = _read_data_taskB(test=True, test_samples=samples)
+    dataA_elems = _read_data_taskA(tokenizer=tokenizer, test=True, test_samples=samples)
+    #dataB_elems = _read_data_taskB(test=True, test_samples=samples)
 
     for step in range(0,len(dataA_elems), step_size):
         # test step_size samples at a time
         if step+step_size <= len(dataA_elems):
             step_batch_A = dataA_elems[step:step+step_size]
-            step_batch_B = dataB_elems[step:step+step_size]
+            #step_batch_B = dataB_elems[step:step+step_size]
         else:
             step_batch_A = dataA_elems[step:]
-            step_batch_B = dataB_elems[step:]
+            #step_batch_B = dataB_elems[step:]
 
         if verbose: print("batch_size:", len(step_batch_A))
 
         # use collate_fn to input step_size samples into the model
-        x_A, _, l_terms, tokens = raw2_collate_fn(step_batch_A)
-        x_B, _, gt_terms = seq_collate_fn(step_batch_B)
+        x_A, _, _, tokens = raw2_collate_fn(step_batch_A)
+        #print(x_A)
+        #x_B, _, gt_terms = seq_collate_fn(step_batch_B)
         with torch.no_grad():
             # predict with modelAB
-            out_A, out_B = model(x_A, x_B)
+            out_A = model.A_model(x_A[0])
 
             logits_A = out_A.logits   
             pred_tokens = torch.argmax(logits_A, -1)
+            #print(pred_tokens)
             _, pred_terms = get_preds_terms(pred_tokens, tokens, roberta=True)
 
-            logits_B = out_B.logits   
-            pred_sents = torch.argmax(logits_B, -1)
+            #logits_B = out_B.logits   
+            #pred_sents = torch.argmax(logits_B, -1)
 
 
         # build (term,aspect) couples to produce correct output for the metrics
@@ -84,11 +86,15 @@ def predict_taskAB(model, samples: List[Dict], step_size: int=32, label_tags: Di
         for i in range(len(pred_terms)): 
             if verbose:
                 print("\npred terms:", pred_terms[i])
-                print(f"label term: {l_terms[i]}")
+                #print(f"label term: {l_terms[i]}")
 
             for j in pred_terms[i]:
-                # for each predicted term build a couple 
-                preds.append((pred_terms[i],label_tags[int(pred_sents[i+j])]))
+                # for each predicted term build a couple
+                out_B = model.B_model([x_A[i],pred_terms[i]])
+                logits_B = out_B.logits   
+                pred_sents = torch.argmax(logits_B, -1)
+                  
+                preds.append((pred_terms[i],label_tags[int(pred_sents)]))
                 if verbose: print("[LOFFA]:", preds)
 
             if verbose: print("[CACCA]:", preds)
@@ -302,41 +308,47 @@ def predict_taskCD(model, samples: List[Dict], step_size: int=32, label_tags: Di
         x_C, _, _ = cat_collate_fn(step_batch)
         with torch.no_grad():
             # predict with model
-            out_C = model.C_model(x_C)
+            for i in range(len(x_C)): 
+                out_C = model.C_model(x_C[i])
 
-            logits_C = out_C.logits   
-            logits_C = sigmoid(logits_C)
-            pred_cats = (logits_C>threshold).float()*1
+                logits_C = out_C.logits   
+                logits_C = sigmoid(logits_C)
+                pred_cats = (logits_C>threshold).float()*1
 
-            if verbose:
-                print("logits:", logits_C)
-                print("preds: ", pred_cats)
+                if verbose:
+                    print("logits:", logits_C)
+                    print("preds: ", pred_cats)
 
-        # build (term,aspect) couples to produce correct output for the metrics
-        preds = []
-        for i in range(len(x_C)): 
-            # for each elem in collate batch
-            text = x_C[i]
-            if verbose:
-                print("\ntext:", text)
-                print(f"values pred cat: {pred_cats[i]}")
+                # build (term,aspect) couples to produce correct output for the metrics
+                preds = []
+                #for i in range(len(x_C)): 
+                
+                text = x_C[i]
+                #print(text)
+                if verbose:
+                    print("\ntext:", text)
+                    print(f"values pred cat: {pred_cats[0]}")
 
-            for p in range(len(pred_cats[0])):
-                # for each prediction append the categories that scores 1,
-                # with relative predicted polarity.
-                if pred_cats[i][p] == 1:   
-                    # execute D model to get polarity 
-                    out_D = model.D_model([text,label_tags[p]])
-                    logits_D = out_D.logits   
-                    pred_sents = torch.argmax(logits_D, -1)
+                for p in range(5):  # 
+                    # for each category append the categories that scores 1,
+                    # with relative predicted polarity.
+                    if int(pred_cats[0][p]) == 1:   
+                        # execute D model to get polarity 
+                        #print("lt", label_tags[p])
+                        out_D = model.D_model([[text,label_tags[p]]])
+                        logits_D = out_D.logits   
+                        pred_sents = torch.argmax(logits_D, -1)
+                        
 
-                    preds.append((label_tags[p], POLARITY_2_INV[int(pred_sents)]))
-                    if verbose: print("[LOFFA]:", preds)
+                        preds.append((label_tags[p], POLARITY_2_INV[int(pred_sents)]))
+                        if verbose:
+                            print("ps:", pred_sents) 
+                            print("[LOFFA]:", preds)
 
-            # for each elem in collate batch we output a prediction
-            if verbose: print("[CACCA]:", preds)
-            predicted.append({"categories":preds})
-            preds = []
+                # for each elem in collate batch we output a prediction
+                if verbose: print("[CACCA]:", preds)
+                predicted.append({"categories":preds})
+                preds = []
 
     print("Num predictions:", len(predicted))
     return predicted
@@ -469,11 +481,13 @@ class TaskABModel(nn.Module):
 
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
         # load best task-A model
+        hparams["cls_output_dim"] = 4
         self.A_model = ABSALightningModule(test=True).load_from_checkpoint(
-            checkpoint_path="model/to_docker/taskA/BERT_tA_res2res_2FFh_gelu_eps.ckpt",
+            checkpoint_path="model/to_docker/BERT_tA_res2res_2FFh_gelu_eps.ckpt",
             model=TaskATermExtracrionModel(hparams=hparams, tokenizer=self.tokenizer, device=device)
         )
         # load best task-B model
+        hparams["cls_output_dim"] = 5
         self.B_model = ABSALightningModule(test=True).load_from_checkpoint(
             checkpoint_path="model/to_docker/BERT_tB_res2res_2FFh_gelu3_toktok_f1.ckpt",
             model=TaskBAspectSentimentModel(hparams=hparams, device=device)
@@ -485,7 +499,7 @@ class TaskABModel(nn.Module):
         return out_A, out_B
 
     def predict(self, samples: List[Dict]):
-        return predict_taskAB(self, samples=samples)
+        return predict_taskAB(self, samples=samples, tokenizer=self.tokenizer)
 
 ## task C,D
 class TaskCCategoryExtractionModel(nn.Module):
@@ -572,11 +586,13 @@ class TaskCDModel(nn.Module):
         print_hparams(hparams)
 
         # load best task-C model
+        hparams["cls_output_dim"] = 5
         self.C_model = ABSALightningModule(test=True).load_from_checkpoint(
             checkpoint_path="model/to_docker/RoBERTa_tC_res2res_2FFh_gelu.ckpt",
             model=TaskCCategoryExtractionModel(hparams=hparams, device=device)
         )
         # load best task-D model
+        hparams["cls_output_dim"] = 4
         self.D_model = ABSALightningModule(test=True).load_from_checkpoint(
             checkpoint_path="model/to_docker/version_5_lr16_drop06_710.ckpt",
             model=TaskDCategorySentimentModel(hparams=hparams, device=device)

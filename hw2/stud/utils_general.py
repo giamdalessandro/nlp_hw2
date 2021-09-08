@@ -51,13 +51,18 @@ def get_preds_terms(preds, tokens, roberta: bool=False, verbose: bool=False):
 
     pred_terms = []
     sent_terms = []
+    print("preds:", preds)
+
     for b in range(len(preds)):
-        if verbose: print("preds:", preds[b])
+        #if verbose: 
+        print(b)
+        print("preds-b:", preds[b][0])
         preds = []
         term = []
 
         inside = False
-        for p in range(len(tokens[b])): # len(tokens)
+        # len(tokens)
+        for p in range(preds[b]):
             if not inside:
                 if (preds[b][p] != 0 and preds[b][p] != 3):
                     term.append(tokens[b][p])
@@ -157,11 +162,11 @@ def raw2_collate_fn(data_elements: list):
     terms = []
     for elem in data_elements:
         X.append(elem[0])
-        y.append(torch.Tensor(elem[1]))
+        y.append(elem[1])
         terms.append(elem[2])
         toks.append(elem[3])
 
-    y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
+    #y = torch.nn.utils.rnn.pad_sequence(y, batch_first=True)
     return X, y, terms, toks
 
 def cat_collate_fn(data_elements: list):
